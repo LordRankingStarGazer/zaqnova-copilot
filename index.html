@@ -17,63 +17,77 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
     ::-webkit-scrollbar-thumb:hover { background: #334155; }
-    @keyframes pulse-ring { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4)} 50%{box-shadow:0 0 0 8px rgba(239,68,68,0)} }
+    @keyframes pulse-ring       { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4)}  50%{box-shadow:0 0 0 8px rgba(239,68,68,0)} }
     @keyframes pulse-ring-amber { 0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.35)} 50%{box-shadow:0 0 0 6px rgba(245,158,11,0)} }
-    @keyframes blink-cursor { 0%,50%{opacity:1} 51%,100%{opacity:0} }
-    @keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-    @keyframes spin { to{transform:rotate(360deg)} }
-    .pulse-ring { animation: pulse-ring 1.5s ease infinite; }
-    .pulse-ring-amber { animation: pulse-ring-amber 2s ease infinite; }
-    .blink::after { content:'▋'; animation: blink-cursor 1s infinite; color:#3b82f6; }
-    .fade-up { animation: fadeUp 0.2s ease; }
-    .spinner { animation: spin 0.7s linear infinite; }
-    textarea { resize: vertical; }
-    input[type=file] { display:none; }
-    .toggle-knob { transition: transform 0.15s ease; }
+    @keyframes blink-cursor  { 0%,50%{opacity:1} 51%,100%{opacity:0} }
+    @keyframes fadeUp        { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes spin          { to{transform:rotate(360deg)} }
+    .pulse-ring       { animation: pulse-ring       1.5s ease infinite; }
+    .pulse-ring-amber { animation: pulse-ring-amber 2s   ease infinite; }
+    .blink::after     { content:'▋'; animation: blink-cursor 1s infinite; color:#3b82f6; }
+    .fade-up          { animation: fadeUp 0.2s ease; }
+    .spinner          { animation: spin 0.7s linear infinite; }
+    textarea          { resize: vertical; }
+    input[type=file]  { display: none; }
+    .toggle-knob      { transition: transform 0.15s ease; }
+    .doc-row:hover .doc-remove { opacity: 1; }
+    .doc-remove { opacity: 0; transition: opacity 0.15s; }
   </style>
 </head>
 <body>
 <div id="root"></div>
-
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
 
-// ─── POPUP DOCUMENT ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════════
+const LS_API_KEY      = 'zaqnova_api_key';
+const LS_RESUME_DOCS  = 'zaqnova_resume_docs';
+const LS_CONTEXT_DOCS = 'zaqnova_context_docs';
+const LS_HISTORY      = 'zaqnova_history';
+const LS_MODEL        = 'zaqnova_model';
+const MAX_DOC_CHARS   = 15000;
+const MAX_RESUME_DOCS = 5;
+const MAX_CTX_DOCS    = 8;
+const HISTORY_TTL_MS  = 30 * 24 * 60 * 60 * 1000;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// POPUP HTML
+// ═══════════════════════════════════════════════════════════════════════════════
 const POPUP_STYLES = `
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#080c14;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden;transition:opacity .2s}
 #hdr{padding:10px 14px;border-bottom:1px solid #0f172a;display:flex;align-items:center;justify-content:space-between;background:#0b1120;flex-shrink:0}
-#hdr .dot{width:7px;height:7px;border-radius:50%;background:#22c55e;margin-right:8px;flex-shrink:0;animation:dotPulse 2s ease infinite}
-@keyframes dotPulse{0%,100%{opacity:1}50%{opacity:.4}}
+#hdr .dot{width:7px;height:7px;border-radius:50%;background:#22c55e;margin-right:8px;flex-shrink:0;animation:dp 2s ease infinite}
+@keyframes dp{0%,100%{opacity:1}50%{opacity:.4}}
 #hdr .brand{font-size:10px;color:#3b82f6;font-weight:700;letter-spacing:.1em;margin-right:6px}
 #hdr .lbl{font-size:10px;color:#334155;font-weight:600;letter-spacing:.06em}
 #hdr .hint{font-size:10px;color:#1e293b}
 #root{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
 #root::-webkit-scrollbar{width:3px}
 #root::-webkit-scrollbar-thumb{background:#1e293b;border-radius:2px}
-.card{background:#0b1120;border:1px solid #0f172a;border-radius:10px;padding:14px;animation:fadeUp .2s ease}
-@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.card{background:#0b1120;border:1px solid #0f172a;border-radius:10px;padding:14px;animation:fu .2s ease}
+@keyframes fu{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 .qlbl{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#475569;margin-bottom:5px;font-weight:700}
 .qtxt{font-size:12px;color:#64748b;line-height:1.5;margin-bottom:12px}
 .albl{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#3b82f6;margin-bottom:5px;font-weight:700}
 .atxt{font-size:13px;color:#e2e8f0;line-height:1.75;white-space:pre-wrap;word-break:break-word}
-.atxt.streaming::after{content:'▋';animation:blink 1s infinite;color:#3b82f6}
-@keyframes blink{0%,50%{opacity:1}51%,100%{opacity:0}}
+.atxt.streaming::after{content:'▋';animation:bl 1s infinite;color:#3b82f6}
+@keyframes bl{0%,50%{opacity:1}51%,100%{opacity:0}}
 .cbtn{margin-top:10px;padding:5px 11px;background:transparent;border:1px solid #1e293b;border-radius:6px;color:#475569;font-size:11px;cursor:pointer;transition:all .15s}
 .cbtn:hover{background:#0f172a;color:#e2e8f0;border-color:#334155}
 .cbtn.ok{color:#22c55e;border-color:#22c55e}
 .proc{background:#0b1120;border:1px solid #0f172a;border-radius:10px;padding:14px;display:flex;align-items:center;gap:10px}
-.spin{width:14px;height:14px;border:2px solid #1e293b;border-top-color:#3b82f6;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
-@keyframes spin{to{transform:rotate(360deg)}}
+.spin{width:14px;height:14px;border:2px solid #1e293b;border-top-color:#3b82f6;border-radius:50%;animation:sp .7s linear infinite;flex-shrink:0}
+@keyframes sp{to{transform:rotate(360deg)}}
 .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#1e293b;gap:10px;font-size:13px;pointer-events:none;user-select:none;text-align:center;padding:20px}
-.footer{padding:7px 14px;border-top:1px solid #0f172a;font-size:10px;color:#1e293b;text-align:center;flex-shrink:0;letter-spacing:.03em}
+.footer{padding:7px 14px;border-top:1px solid #0f172a;font-size:10px;color:#1e293b;text-align:center;flex-shrink:0}
 `;
-
 const POPUP_SCRIPT = `
 var entries=[];
 window.addEventListener('message',function(e){
-  var d=e.data;
-  if(!d||!d.t) return;
+  var d=e.data; if(!d||!d.t) return;
   if(d.t==='add'){entries.push(d.entry);render();}
   else if(d.t==='upd'){var i=entries.findIndex(function(x){return x.id===d.id});if(i>=0){entries[i]=Object.assign({},entries[i],d.patch);render();}}
   else if(d.t==='clr'){entries=[];render();}
@@ -83,20 +97,16 @@ window.addEventListener('message',function(e){
 function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function render(){
   var r=document.getElementById('root');
-  if(!entries.length){
-    r.innerHTML='<div class="empty"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Waiting for questions...</span><span style="font-size:11px;color:#1e293b">Auto-detect is active</span></div>';
-    return;
-  }
+  if(!entries.length){r.innerHTML='<div class="empty"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Waiting for questions…</span><span style="font-size:11px;color:#1e293b">Auto-detect is active</span></div>';return;}
   r.innerHTML=entries.map(function(en){
-    if(en.loading){return '<div class="proc"><div class="spin"></div><span style="font-size:12px;color:#475569">Generating answer...</span></div>';}
+    if(en.loading)return'<div class="proc"><div class="spin"></div><span style="font-size:12px;color:#475569">Generating answer…</span></div>';
     var sa=en.streaming?' streaming':'';
-    return '<div class="card" id="c'+en.id+'"><div class="qlbl">Question</div><div class="qtxt">'+esc(en.q)+'</div><div class="albl">Answer</div><div class="atxt'+sa+'">'+esc(en.a||'')+'</div>'+(en.streaming?'':'<button class="cbtn" onclick="cp(this,\''+en.id+'\')">Copy answer</button>')+'</div>';
+    return'<div class="card" id="c'+en.id+'"><div class="qlbl">Question</div><div class="qtxt">'+esc(en.q)+'</div><div class="albl">Answer</div><div class="atxt'+sa+'">'+esc(en.a||'')+'</div>'+(en.streaming?'':'<button class="cbtn" onclick="cp(this,\''+en.id+'\')">Copy answer</button>')+'</div>';
   }).join('');
   r.scrollTop=r.scrollHeight;
 }
 function cp(btn,id){
-  var en=entries.find(function(x){return x.id===id});
-  if(!en)return;
+  var en=entries.find(function(x){return x.id===id}); if(!en)return;
   navigator.clipboard.writeText(en.a||'').then(function(){
     btn.textContent='Copied!';btn.classList.add('ok');
     setTimeout(function(){btn.textContent='Copy answer';btn.classList.remove('ok');},2000);
@@ -104,32 +114,68 @@ function cp(btn,id){
 }
 render();
 `;
-
 const POPUP_HTML = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Notes</title><style>${POPUP_STYLES}</style></head><body>
-<div id="hdr">
-  <div style="display:flex;align-items:center"><div class="dot"></div><span class="brand">ZAQNOVA</span><span class="lbl">ANSWERS</span></div>
-  <span class="hint">Ctrl+Shift+H to hide</span>
-</div>
+<div id="hdr"><div style="display:flex;align-items:center"><div class="dot"></div><span class="brand">ZAQNOVA</span><span class="lbl">ANSWERS</span></div><span class="hint">Ctrl+Shift+H</span></div>
 <div id="root"></div>
-<div class="footer">ZaqNova Interview CoPilot · Ctrl+Shift+H to hide</div>
+<div class="footer">ZaqNova Interview CoPilot \xb7 Ctrl+Shift+H to hide</div>
 <script>${POPUP_SCRIPT}<\/script></body></html>`;
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────────
-let idCounter = 0;
-const uid = () => `${Date.now()}-${++idCounter}`;
+// ═══════════════════════════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════════
+let _id = 0;
+const uid = () => `${Date.now()}-${++_id}`;
 
-const QUESTION_STARTERS = [
-  'what','how','why','when','where','who','which','whose','whom',
-  'can you','could you','would you','will you','do you','did you',
-  'have you','are you','tell me','describe','explain','walk me through',
-  'share','give me','talk about','let\'s say','imagine','suppose',
-  'if you','what if','in your','why did','why do','how did','how do',
-  'can you describe','could you describe','have you ever',
-  'what was','what were','what is','what are','what would',
-  'how would','how have','where do','where did','why would',
-  'who was','who is','what experience','what skills','tell us',
-  'give us','can you give','can you share','can you walk',
-];
+function useLocalStorage(key, defaultValue) {
+  const [value, setValue] = useState(() => {
+    try { const s = localStorage.getItem(key); return s !== null ? JSON.parse(s) : defaultValue; }
+    catch { return defaultValue; }
+  });
+  const set = (newVal) => {
+    const v = typeof newVal === 'function' ? newVal(value) : newVal;
+    setValue(v);
+    try { localStorage.setItem(key, JSON.stringify(v)); } catch {}
+  };
+  return [value, set];
+}
+
+function formatTime(secs) {
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function triggerDownload(content, mime, filename) {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
+  const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function extractPdfText(file) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  let text = '';
+  for (let i = 1; i <= Math.min(pdf.numPages, 12); i++) {
+    const content = await (await pdf.getPage(i)).getTextContent();
+    text += content.items.map(it => it.str).join(' ') + '\n';
+  }
+  return text.trim();
+}
+
+async function extractDocxText(file) {
+  const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+  return result.value.trim();
+}
+
+async function extractFileText(file) {
+  const n = file.name.toLowerCase();
+  if (file.type === 'application/pdf' || n.endsWith('.pdf')) return extractPdfText(file);
+  if (n.endsWith('.docx') || file.type.includes('wordprocessingml')) return extractDocxText(file);
+  if (n.endsWith('.doc')) throw new Error('.doc not supported — save as .docx or .pdf');
+  return file.text();
+}
+
+const QUESTION_STARTERS = ['what','how','why','when','where','who','which','whose','whom','can you','could you','would you','will you','do you','did you','have you','are you','tell me','describe','explain','walk me through','share','give me','talk about','let\'s say','imagine','suppose','if you','what if','in your','why did','why do','how did','how do','have you ever','what was','what were','what is','what are','what would','how would','how have','where do','where did','why would','who was','who is','what experience','tell us','give us','can you walk','can you share','can you give','can you describe'];
 
 function isQuestion(text) {
   if (!text || text.trim().length < 8) return false;
@@ -139,41 +185,45 @@ function isQuestion(text) {
   return QUESTION_STARTERS.some(s => l.startsWith(s));
 }
 
-function formatTime(secs) {
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = secs % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+// ═══════════════════════════════════════════════════════════════════════════════
+// HISTORY STORAGE
+// ═══════════════════════════════════════════════════════════════════════════════
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(LS_HISTORY);
+    if (!raw) return [];
+    const now = Date.now();
+    return JSON.parse(raw).filter(s => now - s.savedAt < HISTORY_TTL_MS);
+  } catch { return []; }
 }
 
-async function extractPdfText(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-  let text = '';
-  for (let i = 1; i <= Math.min(pdf.numPages, 12); i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    text += content.items.map(it => it.str).join(' ') + '\n';
-  }
-  return text.trim();
+function saveToHistory(sessionData, cfg) {
+  try {
+    const history = loadHistory();
+    history.push({
+      id: uid(),
+      savedAt: Date.now(),
+      jobTitle: cfg.jobTitle || 'Untitled',
+      model: cfg.model,
+      duration: sessionData.duration || 0,
+      transcriptLines: (sessionData.transcript || []).map(t => ({ type: t.type, text: t.text })),
+      qaEntries: (sessionData.entries || [])
+        .filter(e => e.a && !e.a.startsWith('Error:'))
+        .map(e => ({ q: e.q, a: e.a })),
+    });
+    localStorage.setItem(LS_HISTORY, JSON.stringify(history));
+  } catch (e) { console.warn('History save failed:', e); }
 }
 
-async function extractDocxText(file) {
-  const buf = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer: buf });
-  return result.value.trim();
+function deleteHistoryItem(id) {
+  try {
+    localStorage.setItem(LS_HISTORY, JSON.stringify(loadHistory().filter(s => s.id !== id)));
+  } catch {}
 }
 
-async function extractFileText(file) {
-  const name = file.name.toLowerCase();
-  if (file.type === 'application/pdf' || name.endsWith('.pdf')) return extractPdfText(file);
-  if (name.endsWith('.docx') || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return extractDocxText(file);
-  if (name.endsWith('.doc')) throw new Error('.doc (old Word) format not supported — please save as .docx or .pdf');
-  return file.text();
-}
-
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI
+// ═══════════════════════════════════════════════════════════════════════════════
 async function callAnthropic(apiKey, model, messages, system, onChunk) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -183,33 +233,25 @@ async function callAnthropic(apiKey, model, messages, system, onChunk) {
       'content-type': 'application/json',
       'anthropic-dangerous-allow-browser': 'true',
     },
-    body: JSON.stringify({ model, max_tokens: 600, stream: true, system, messages })
+    body: JSON.stringify({ model, max_tokens: 600, stream: true, system, messages }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.error?.message || `API error ${res.status}`);
   }
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let buf = '';
-  let full = '';
+  const reader = res.body.getReader(); const dec = new TextDecoder();
+  let buf = '', full = '';
   while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+    const { done, value } = await reader.read(); if (done) break;
     buf += dec.decode(value, { stream: true });
-    const lines = buf.split('\n');
-    buf = lines.pop();
+    const lines = buf.split('\n'); buf = lines.pop();
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue;
-      const data = line.slice(6).trim();
-      if (data === '[DONE]') continue;
+      const data = line.slice(6).trim(); if (data === '[DONE]') continue;
       try {
-        const parsed = JSON.parse(data);
-        if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-          full += parsed.delta.text;
-          onChunk && onChunk(full);
-        }
-      } catch (_) {}
+        const p = JSON.parse(data);
+        if (p.type === 'content_block_delta' && p.delta?.text) { full += p.delta.text; onChunk?.(full); }
+      } catch {}
     }
   }
   return full;
@@ -217,110 +259,165 @@ async function callAnthropic(apiKey, model, messages, system, onChunk) {
 
 function buildSystemPrompt(cfg) {
   const parts = [
-    `You are a personal interview coach helping a candidate answer questions live during a job interview. Be concise, confident, and direct. Sound completely natural — like a real person speaking, not a formal essay or AI.`,
-    `Keep answers to 3-5 sentences. Lead with the most impressive point. Never ramble.`,
-    `Job role being interviewed for: ${cfg.jobTitle || 'Not specified'}.`,
+    'You are a personal interview coach helping a candidate answer questions live during a job interview. Be concise, confident, and direct. Sound completely natural — like a real person speaking.',
+    'Keep answers to 3-5 sentences. Lead with the most impressive point.',
+    `Job role: ${cfg.jobTitle || 'Not specified'}.`,
   ];
-  if (cfg.resumeText) parts.push(`\nCandidate's resume / background:\n${cfg.resumeText.slice(0, 4500)}`);
-  if (cfg.contextDoc) parts.push(`\nAdditional context document:\n${cfg.contextDoc.slice(0, 2500)}`);
-  if (cfg.context) parts.push(`\nExtra instructions from the candidate:\n${cfg.context}`);
-  parts.push(`\nIMPORTANT: Never say you are an AI. Always answer in first person as the candidate. Be specific, use real-sounding examples from the resume where possible.`);
+  const activeResumes = (cfg.resumeDocs || []).filter(d => d.active);
+  if (activeResumes.length) {
+    parts.push('\nCandidate resume / background:\n' +
+      activeResumes.map(d => `[${d.name}]\n${d.text.slice(0,3000)}`).join('\n\n'));
+  }
+  const activeCtx = (cfg.contextDocs || []).filter(d => d.active);
+  if (activeCtx.length) {
+    parts.push('\nContext documents:\n' +
+      activeCtx.map(d => `[${d.name}]\n${d.text.slice(0,2000)}`).join('\n\n'));
+  }
+  if (cfg.context) parts.push(`\nExtra instructions: ${cfg.context}`);
+  parts.push('\nNever say you are an AI. Answer in first person as the candidate. Be specific and use examples where possible.');
   return parts.join('\n');
 }
 
-// ─── COST ESTIMATE ───────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// DOCUMENT LIST COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
+function DocumentList({ docs, onChange, label, maxDocs, hint }) {
+  const inputRef = useRef();
+  const [adding, setAdding] = useState(false);
+  const [addErr, setAddErr] = useState('');
+
+  async function handleFiles(e) {
+    const files = Array.from(e.target.files); e.target.value = '';
+    if (!files.length) return;
+    setAdding(true); setAddErr('');
+    const newDocs = [];
+    for (const file of files) {
+      if (docs.length + newDocs.length >= maxDocs) break;
+      try {
+        const text = await extractFileText(file);
+        newDocs.push({ id: uid(), name: file.name, text: text.slice(0, MAX_DOC_CHARS), active: true, size: text.length, addedAt: Date.now() });
+      } catch (err) { setAddErr(err.message); }
+    }
+    if (newDocs.length) onChange([...docs, ...newDocs]);
+    setAdding(false);
+  }
+
+  const toggle  = (id) => onChange(docs.map(d => d.id === id ? { ...d, active: !d.active } : d));
+  const remove  = (id) => onChange(docs.filter(d => d.id !== id));
+  const canAdd  = docs.length < maxDocs;
+  const active  = docs.filter(d => d.active).length;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{label}</span>
+          {active > 0 && <span className="text-xs text-blue-400/70 font-medium">{active} active</span>}
+        </div>
+        <button
+          onClick={() => canAdd && !adding && inputRef.current.click()}
+          disabled={!canAdd || adding}
+          className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-semibold"
+        >
+          {adding
+            ? <div className="w-3 h-3 border border-slate-600 border-t-blue-400 rounded-full spinner" />
+            : <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+          }
+          {adding ? 'Reading…' : 'Add'}
+        </button>
+      </div>
+      <input ref={inputRef} type="file" accept=".pdf,.docx,.txt" multiple onChange={handleFiles} />
+
+      <div className="space-y-1">
+        {docs.length === 0 && (
+          <button
+            onClick={() => !adding && inputRef.current.click()}
+            className="w-full py-3 text-xs text-slate-600 border border-dashed border-[#1e293b] rounded-lg hover:border-slate-600 hover:text-slate-500 transition-colors text-center"
+          >
+            {hint || 'Click Add \xb7 .pdf .docx .txt'}
+          </button>
+        )}
+        {docs.map(doc => (
+          <div key={doc.id} className={`doc-row flex items-center gap-2 px-2.5 py-2 rounded-lg border transition-all ${doc.active ? 'border-blue-500/25 bg-blue-500/5' : 'border-[#1e293b]'}`}>
+            <input
+              type="checkbox" checked={doc.active} onChange={() => toggle(doc.id)}
+              className="flex-shrink-0 w-3.5 h-3.5 cursor-pointer accent-blue-500"
+            />
+            <span className={`flex-1 text-xs truncate min-w-0 ${doc.active ? 'text-slate-300' : 'text-slate-600'}`} title={doc.name}>
+              {doc.name}
+            </span>
+            <span className="text-xs text-slate-700 flex-shrink-0 font-mono tabular-nums">
+              {doc.size > 999 ? `${(doc.size/1000).toFixed(1)}k` : doc.size}
+            </span>
+            <button
+              onClick={() => remove(doc.id)}
+              className="doc-remove text-slate-600 hover:text-red-400 transition-colors flex-shrink-0 w-4 text-center text-sm leading-none"
+            >&times;</button>
+          </div>
+        ))}
+      </div>
+
+      {addErr && <p className="text-xs text-red-400 mt-1.5">{addErr}</p>}
+      <div className="flex items-center justify-between mt-1.5">
+        <p className="text-xs text-slate-700">.pdf \xb7 .docx \xb7 .txt — select multiple</p>
+        {docs.length >= maxDocs && <p className="text-xs text-slate-600">Max {maxDocs} docs</p>}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SETUP SCREEN
+// ═══════════════════════════════════════════════════════════════════════════════
 const COST_ESTIMATES = [
-  { model: 'claude-sonnet-4-20250514', label: 'Sonnet 4', range: '~$0.10–$0.25', note: 'Recommended — great balance' },
-  { model: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', range: '~$0.02–$0.06', note: 'Fastest, lowest cost' },
-  { model: 'claude-opus-4-5', label: 'Opus 4.5', range: '~$0.50–$1.20', note: 'Most capable, highest cost' },
+  { model: 'claude-sonnet-4-20250514',   label: 'Sonnet 4',   range: '~$0.10–$0.25', note: 'Recommended' },
+  { model: 'claude-haiku-4-5-20251001',  label: 'Haiku 4.5',  range: '~$0.02–$0.06', note: 'Fastest & cheapest' },
+  { model: 'claude-opus-4-5',            label: 'Opus 4.5',   range: '~$0.50–$1.20', note: 'Most capable' },
 ];
 
-// ─── SETUP SCREEN ────────────────────────────────────────────────────────────────
-const LS_KEY = 'zaqnova_api_key';
+function SetupScreen({ onStart, onHistory }) {
+  const [apiKey, setApiKey]           = useLocalStorage(LS_API_KEY, '');
+  const [rememberKey, setRememberKey] = useState(() => !!localStorage.getItem(LS_API_KEY));
+  const [resumeDocs, setResumeDocs]   = useLocalStorage(LS_RESUME_DOCS, []);
+  const [contextDocs, setContextDocs] = useLocalStorage(LS_CONTEXT_DOCS, []);
+  const [model, setModel]             = useLocalStorage(LS_MODEL, 'claude-sonnet-4-20250514');
+  const [jobTitle, setJobTitle]       = useState('');
+  const [context, setContext]         = useState('');
+  const [error, setError]             = useState('');
+  const [showCost, setShowCost]       = useState(false);
+  const historyCount = loadHistory().length;
 
-function SetupScreen({ onStart }) {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem(LS_KEY) || '');
-  const [rememberKey, setRememberKey] = useState(() => !!localStorage.getItem(LS_KEY));
-  const [jobTitle, setJobTitle] = useState('');
-  const [context, setContext] = useState('');
-  const [resumeText, setResumeText] = useState('');
-  const [resumeName, setResumeName] = useState('');
-  const [contextDoc, setContextDoc] = useState('');
-  const [contextDocName, setContextDocName] = useState('');
-  const [model, setModel] = useState('claude-sonnet-4-20250514');
-  const [resumeLoading, setResumeLoading] = useState(false);
-  const [docLoading, setDocLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [showCost, setShowCost] = useState(false);
-  const resumeRef = useRef();
-  const docsRef = useRef();
-
-  const handleRememberToggle = (checked) => {
+  function handleRememberToggle(checked) {
     setRememberKey(checked);
-    if (checked && apiKey.trim()) localStorage.setItem(LS_KEY, apiKey.trim());
-    else localStorage.removeItem(LS_KEY);
-  };
+    if (checked && apiKey.trim()) localStorage.setItem(LS_API_KEY, apiKey.trim());
+    else localStorage.removeItem(LS_API_KEY);
+  }
 
-  const handleApiKeyChange = (val) => {
+  function handleApiKeyChange(val) {
     setApiKey(val);
     if (rememberKey) {
-      if (val.trim()) localStorage.setItem(LS_KEY, val.trim());
-      else localStorage.removeItem(LS_KEY);
+      if (val.trim()) localStorage.setItem(LS_API_KEY, val.trim());
+      else localStorage.removeItem(LS_API_KEY);
     }
-  };
+  }
 
-  const handleResume = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setResumeName(file.name);
-    setResumeLoading(true);
-    setError('');
-    try {
-      const text = await extractFileText(file);
-      setResumeText(text);
-    } catch (err) {
-      setError('Resume: ' + err.message);
-      setResumeName('');
-    }
-    setResumeLoading(false);
-    e.target.value = '';
-  };
-
-  const handleContextDoc = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setContextDocName(file.name);
-    setDocLoading(true);
-    setError('');
-    try {
-      const text = await extractFileText(file);
-      setContextDoc(text);
-    } catch (err) {
-      setError('Context doc: ' + err.message);
-      setContextDocName('');
-    }
-    setDocLoading(false);
-    e.target.value = '';
-  };
-
-  const handleStart = () => {
+  function handleStart() {
     if (!apiKey.trim()) { setError('Please enter your Anthropic API key.'); return; }
     if (!jobTitle.trim()) { setError('Please enter the job title.'); return; }
     setError('');
-    onStart({ apiKey: apiKey.trim(), jobTitle: jobTitle.trim(), context, resumeText, contextDoc, model });
-  };
+    onStart({ apiKey: apiKey.trim(), jobTitle: jobTitle.trim(), context, resumeDocs, contextDocs, model });
+  }
 
   const selectedCost = COST_ESTIMATES.find(c => c.model === model);
 
   return (
     <div className="min-h-screen bg-[#080c14] flex items-center justify-center p-4">
-      <div className="w-full max-w-xl">
-        {/* Logo / Brand */}
-        <div className="text-center mb-7">
-          <div className="inline-flex items-center gap-2 mb-3">
+      <div className="w-full max-w-2xl">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center gap-2 mb-2">
             <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-blue-600/20 border border-blue-500/30">
               <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"/>
               </svg>
             </div>
             <div className="text-left">
@@ -332,117 +429,61 @@ function SetupScreen({ onStart }) {
         </div>
 
         <div className="bg-[#0b1120] border border-[#0f172a] rounded-2xl p-6 space-y-5">
-          {/* API Key */}
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Anthropic API Key</label>
             <input
-              type="password"
-              value={apiKey}
-              onChange={e => handleApiKeyChange(e.target.value)}
+              type="password" value={apiKey} onChange={e => handleApiKeyChange(e.target.value)}
               placeholder="sk-ant-..."
               className={`w-full bg-[#080c14] border rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none transition-colors ${rememberKey && apiKey ? 'border-green-500/40 focus:border-green-500/60' : 'border-[#1e293b] focus:border-blue-500/50'}`}
             />
             <div className="flex items-center justify-between mt-2">
-              <label className="flex items-center gap-2 cursor-pointer select-none group">
-                <div
-                  onClick={() => handleRememberToggle(!rememberKey)}
-                  className={`relative w-8 h-4 rounded-full transition-colors flex-shrink-0 cursor-pointer ${rememberKey ? 'bg-green-600' : 'bg-slate-700'}`}
-                >
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <div onClick={() => handleRememberToggle(!rememberKey)}
+                  className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer flex-shrink-0 ${rememberKey ? 'bg-green-600' : 'bg-slate-700'}`}>
                   <div className={`toggle-knob absolute top-0.5 w-3 h-3 rounded-full bg-white ${rememberKey ? 'translate-x-4' : 'translate-x-0.5'}`} />
                 </div>
-                <span className="text-xs text-slate-500 group-hover:text-slate-400 transition-colors">
-                  {rememberKey ? <span className="text-green-400">Key saved on this device</span> : 'Remember on this device'}
+                <span className="text-xs text-slate-500">
+                  {rememberKey ? <span className="text-green-400">Saved on this device</span> : 'Remember on this device'}
                 </span>
               </label>
               {rememberKey && apiKey && (
-                <button
-                  onClick={() => { setApiKey(''); setRememberKey(false); localStorage.removeItem(LS_KEY); }}
-                  className="text-xs text-slate-600 hover:text-red-400 transition-colors"
-                >
-                  Forget key
-                </button>
+                <button onClick={() => { handleApiKeyChange(''); setRememberKey(false); localStorage.removeItem(LS_API_KEY); }}
+                  className="text-xs text-slate-600 hover:text-red-400 transition-colors">Forget key</button>
               )}
             </div>
           </div>
 
-          {/* Job Title */}
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Job Title / Role</label>
-            <input
-              type="text"
-              value={jobTitle}
-              onChange={e => setJobTitle(e.target.value)}
+            <input type="text" value={jobTitle} onChange={e => setJobTitle(e.target.value)}
               placeholder="e.g. Senior Software Engineer at Stripe"
               className="w-full bg-[#080c14] border border-[#1e293b] rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 transition-colors"
             />
           </div>
 
-          {/* Resume + Context Doc */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Resume</label>
-              <input ref={resumeRef} type="file" accept=".pdf,.docx,.txt" onChange={handleResume} />
-              <button
-                onClick={() => resumeRef.current.click()}
-                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border text-xs transition-colors ${
-                  resumeName ? 'border-green-500/40 text-green-400 bg-green-500/10' : 'border-[#1e293b] text-slate-500 hover:border-slate-600 hover:text-slate-400'
-                }`}
-              >
-                {resumeLoading ? (
-                  <div className="w-3.5 h-3.5 border-2 border-slate-600 border-t-green-400 rounded-full spinner flex-shrink-0" />
-                ) : (
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                  </svg>
-                )}
-                <span className="truncate">{resumeLoading ? 'Reading…' : resumeName || 'PDF or Word'}</span>
-              </button>
-              <p className="text-xs text-slate-700 mt-1">.pdf · .docx · .txt</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="bg-[#080c14] rounded-xl border border-[#0f172a] p-4">
+              <DocumentList docs={resumeDocs} onChange={setResumeDocs} label="Resume Documents" maxDocs={MAX_RESUME_DOCS} hint="Upload resume(s) \xb7 .pdf .docx .txt" />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Context Doc <span className="text-slate-600 normal-case font-normal">(opt.)</span></label>
-              <input ref={docsRef} type="file" accept=".pdf,.docx,.txt" onChange={handleContextDoc} />
-              <button
-                onClick={() => docsRef.current.click()}
-                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border text-xs transition-colors ${
-                  contextDocName ? 'border-green-500/40 text-green-400 bg-green-500/10' : 'border-[#1e293b] text-slate-500 hover:border-slate-600 hover:text-slate-400'
-                }`}
-              >
-                {docLoading ? (
-                  <div className="w-3.5 h-3.5 border-2 border-slate-600 border-t-green-400 rounded-full spinner flex-shrink-0" />
-                ) : (
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                  </svg>
-                )}
-                <span className="truncate">{docLoading ? 'Reading…' : contextDocName || 'PDF or Word'}</span>
-              </button>
-              <p className="text-xs text-slate-700 mt-1">.pdf · .docx · .txt</p>
+            <div className="bg-[#080c14] rounded-xl border border-[#0f172a] p-4">
+              <DocumentList docs={contextDocs} onChange={setContextDocs} label="Context Documents" maxDocs={MAX_CTX_DOCS} hint="Job desc, notes, prep docs…" />
             </div>
           </div>
 
-          {/* Model */}
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">AI Model</label>
-            <select
-              value={model}
-              onChange={e => setModel(e.target.value)}
-              className="w-full bg-[#080c14] border border-[#1e293b] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors"
-            >
+            <select value={model} onChange={e => setModel(e.target.value)}
+              className="w-full bg-[#080c14] border border-[#1e293b] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors">
               <option value="claude-sonnet-4-20250514">claude-sonnet-4-20250514 — Recommended</option>
               <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001 — Fastest &amp; cheapest</option>
               <option value="claude-opus-4-5">claude-opus-4-5 — Most capable</option>
             </select>
           </div>
 
-          {/* Context / Instructions */}
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Extra Instructions <span className="text-slate-600 normal-case font-normal">(opt.)</span></label>
-            <textarea
-              value={context}
-              onChange={e => setContext(e.target.value)}
-              placeholder="e.g. Emphasize my distributed systems experience. Keep answers concise — under 45 seconds to speak."
-              rows={3}
+            <textarea value={context} onChange={e => setContext(e.target.value)} rows={2}
+              placeholder="e.g. Emphasise distributed systems experience. Keep answers under 45 seconds."
               className="w-full bg-[#080c14] border border-[#1e293b] rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 transition-colors"
             />
           </div>
@@ -450,237 +491,197 @@ function SetupScreen({ onStart }) {
           {error && (
             <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2.5">
               <svg className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z"/>
               </svg>
               <span className="text-sm text-red-400">{error}</span>
             </div>
           )}
 
-          <button
-            onClick={handleStart}
-            className="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-semibold rounded-xl py-3 text-sm transition-colors flex items-center justify-center gap-2"
-          >
+          <button onClick={handleStart}
+            className="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-semibold rounded-xl py-3 text-sm transition-colors flex items-center justify-center gap-2">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"/>
             </svg>
             Launch Session
           </button>
         </div>
 
-        {/* Cost Estimate */}
-        <div className="mt-4 bg-[#0b1120] border border-[#0f172a] rounded-xl overflow-hidden">
-          <button
-            onClick={() => setShowCost(v => !v)}
-            className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#0f172a]/50 transition-colors"
-          >
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="bg-[#0b1120] border border-[#0f172a] rounded-xl overflow-hidden">
+            <button onClick={() => setShowCost(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-[#0f172a]/50 transition-colors">
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Cost / 30 min</span>
+              <div className="flex items-center gap-2">
+                {selectedCost && <span className="text-xs text-blue-400 font-semibold">{selectedCost.range}</span>}
+                <svg className={`w-3 h-3 text-slate-600 transition-transform ${showCost ? 'rotate-180':''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
+                </svg>
+              </div>
+            </button>
+            {showCost && (
+              <div className="px-4 pb-3 border-t border-[#0f172a] pt-2 space-y-1.5">
+                {COST_ESTIMATES.map(c => (
+                  <div key={c.model} className={`flex justify-between text-xs py-1 px-2 rounded ${model===c.model?'bg-blue-500/10 text-blue-400':'text-slate-500'}`}>
+                    <span>{c.label} <span className="text-slate-700">{c.note}</span></span>
+                    <span className="font-semibold">{c.range}</span>
+                  </div>
+                ))}
+                <p className="text-xs text-slate-700 pt-1">~20 questions \xb7 800-token prompt \xb7 200-token answers</p>
+              </div>
+            )}
+          </div>
+
+          <button onClick={onHistory}
+            className="bg-[#0b1120] border border-[#0f172a] rounded-xl px-4 py-2.5 flex items-center justify-between hover:border-slate-700 transition-colors group">
             <div className="flex items-center gap-2">
-              <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
+              <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
               </svg>
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">API Cost Estimate — 30 min session</span>
+              <span className="text-xs font-semibold text-slate-600 group-hover:text-slate-400 uppercase tracking-wider transition-colors">Session History</span>
             </div>
-            <div className="flex items-center gap-2">
-              {selectedCost && <span className="text-xs text-blue-400 font-semibold">{selectedCost.range}</span>}
-              <svg className={`w-3.5 h-3.5 text-slate-600 transition-transform ${showCost ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+            <div className="flex items-center gap-1.5">
+              {historyCount > 0
+                ? <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-0.5 rounded-full font-semibold">{historyCount}</span>
+                : <span className="text-xs text-slate-700">0 saved</span>
+              }
+              <svg className="w-3 h-3 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/>
               </svg>
             </div>
           </button>
-          {showCost && (
-            <div className="px-4 pb-4 space-y-2 border-t border-[#0f172a]">
-              <p className="text-xs text-slate-600 pt-3 mb-3">Based on ~20 questions, 800-token system prompt, 200-token answers, plus notes generation.</p>
-              {COST_ESTIMATES.map(c => (
-                <div key={c.model} className={`flex items-center justify-between py-2 px-3 rounded-lg ${model === c.model ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-[#080c14]'}`}>
-                  <div>
-                    <span className="text-xs text-slate-300 font-medium">{c.label}</span>
-                    <span className="text-xs text-slate-600 ml-2">{c.note}</span>
-                  </div>
-                  <span className={`text-xs font-semibold ${model === c.model ? 'text-blue-400' : 'text-slate-400'}`}>{c.range}</span>
-                </div>
-              ))}
-              <p className="text-xs text-slate-700 mt-2">Longer resumes, more questions, or longer answers increase cost proportionally. A 1-hour session roughly doubles these estimates.</p>
-            </div>
-          )}
         </div>
 
         <p className="text-center text-xs text-slate-700 mt-3">
-          Answers display in a detached popup — not captured by Zoom, Teams, or Meet by default.
+          Answer popup not captured by Zoom/Teams/Meet \xb7 Documents saved in your browser
         </p>
       </div>
     </div>
   );
 }
 
-// ─── SESSION SCREEN ──────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// SESSION SCREEN
+// ═══════════════════════════════════════════════════════════════════════════════
 function SessionScreen({ cfg, onEnd }) {
-  const [entries, setEntries] = useState([]);
-  const [transcript, setTranscript] = useState([]);
+  const [entries, setEntries]         = useState([]);
+  const [transcript, setTranscript]   = useState([]);
   const [isListening, setIsListening] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [micError, setMicError] = useState('');
+  const [micError, setMicError]       = useState('');
   const [sessionTime, setSessionTime] = useState(0);
   const [manualInput, setManualInput] = useState('');
-  const [popupOpen, setPopupOpen] = useState(false);
+  const [popupOpen, setPopupOpen]     = useState(false);
   const [popupBlocked, setPopupBlocked] = useState(false);
   const [popupHidden, setPopupHidden] = useState(false);
-  const [statusMsg, setStatusMsg] = useState('');
-  const [autoAnswer, setAutoAnswer] = useState(true);
+  const [statusMsg, setStatusMsg]     = useState('');
+  const [autoAnswer, setAutoAnswer]   = useState(true);
 
-  const popupRef = useRef(null);
+  const popupRef       = useRef(null);
   const recognitionRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
+  const recorderRef    = useRef(null);
   const audioStreamRef = useRef(null);
   const audioChunksRef = useRef([]);
-  const audioBlobRef = useRef(null);
-  const timerRef = useRef(null);
-  const debounceRef = useRef(null);
-  const lastQuestionRef = useRef('');
-  const transcriptEndRef = useRef(null);
-  const entriesRef = useRef([]);
-  const transcriptRef = useRef([]);
+  const timerRef       = useRef(null);
+  const debounceRef    = useRef(null);
+  const lastQRef       = useRef('');
+  const txEndRef       = useRef(null);
+  const entriesRef     = useRef([]);
+  const transcriptRef  = useRef([]);
+  const sessionTimeRef = useRef(0);
 
-  useEffect(() => { entriesRef.current = entries; }, [entries]);
+  useEffect(() => { entriesRef.current    = entries;    }, [entries]);
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
 
-  // Timer
   useEffect(() => {
-    timerRef.current = setInterval(() => setSessionTime(t => t + 1), 1000);
+    timerRef.current = setInterval(() => {
+      setSessionTime(t => { sessionTimeRef.current = t + 1; return t + 1; });
+    }, 1000);
     return () => clearInterval(timerRef.current);
   }, []);
 
-  // Open popup on mount
-  useEffect(() => {
-    openPopup();
-    return () => {
-      if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
-    };
-  }, []);
+  useEffect(() => { openPopup(); return () => { if (popupRef.current && !popupRef.current.closed) popupRef.current.close(); }; }, []);
 
-  // Keyboard shortcut Ctrl+Shift+H
   useEffect(() => {
-    const handler = (e) => {
-      if (e.ctrlKey && e.shiftKey && (e.key === 'H' || e.key === 'h')) {
-        e.preventDefault();
-        togglePopup();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    const h = (e) => { if (e.ctrlKey && e.shiftKey && (e.key === 'H' || e.key === 'h')) { e.preventDefault(); doTogglePopup(); } };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
   }, [popupHidden]);
 
-  // Watch popup close
   useEffect(() => {
-    const check = setInterval(() => {
-      if (popupRef.current && popupRef.current.closed) {
-        setPopupOpen(false);
-        popupRef.current = null;
-      }
-    }, 1200);
-    return () => clearInterval(check);
+    if (window.electronAPI?.onAnswerVisibilityChanged) {
+      window.electronAPI.onAnswerVisibilityChanged(isHidden => setPopupHidden(isHidden));
+    }
   }, []);
 
-  // Auto-scroll transcript
   useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [transcript]);
+    const ch = setInterval(() => {
+      if (popupRef.current && popupRef.current.closed) { setPopupOpen(false); popupRef.current = null; }
+    }, 1200);
+    return () => clearInterval(ch);
+  }, []);
+
+  useEffect(() => { txEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [transcript]);
 
   function openPopup() {
     try {
       const sw = window.screen.width, sh = window.screen.height;
-      const pw = 450, ph = Math.min(720, sh - 80);
-      const pl = Math.max(0, sw - pw - 16), pt = Math.floor((sh - ph) / 2);
+      const pw = 460, ph = Math.min(740, sh - 60);
       const popup = window.open('', 'ZaqNovaAnswers',
-        `width=${pw},height=${ph},left=${pl},top=${pt},menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes`);
+        `width=${pw},height=${ph},left=${Math.max(0,sw-pw-14)},top=${Math.floor((sh-ph)/2)},menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes`);
       if (!popup || popup.closed) { setPopupBlocked(true); return; }
-      popup.document.open();
-      popup.document.write(POPUP_HTML);
-      popup.document.close();
-      popupRef.current = popup;
-      setPopupOpen(true);
-      setPopupBlocked(false);
-      setPopupHidden(false);
-    } catch (_) { setPopupBlocked(true); }
+      popup.document.open(); popup.document.write(POPUP_HTML); popup.document.close();
+      popupRef.current = popup; setPopupOpen(true); setPopupBlocked(false); setPopupHidden(false);
+    } catch { setPopupBlocked(true); }
   }
 
   function postToPopup(msg) {
-    if (popupRef.current && !popupRef.current.closed) {
-      try { popupRef.current.postMessage(msg, '*'); } catch (_) {}
-    }
+    if (popupRef.current && !popupRef.current.closed) try { popupRef.current.postMessage(msg, '*'); } catch {}
   }
 
-  function togglePopup() {
+  function doTogglePopup() {
     if (!popupRef.current || popupRef.current.closed) { openPopup(); return; }
-    if (popupHidden) {
-      postToPopup({ t: 'show' });
-      setPopupHidden(false);
-    } else {
-      postToPopup({ t: 'hide' });
-      setPopupHidden(true);
-    }
+    if (popupHidden) { postToPopup({ t: 'show' }); setPopupHidden(false); }
+    else             { postToPopup({ t: 'hide' }); setPopupHidden(true); }
   }
 
-  function showStatus(msg, ms = 2500) {
-    setStatusMsg(msg);
-    setTimeout(() => setStatusMsg(''), ms);
-  }
+  function showStatus(msg, ms = 2500) { setStatusMsg(msg); setTimeout(() => setStatusMsg(''), ms); }
 
-  // ── Recording ──
   async function startRecording() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      audioStreamRef.current = stream;
-      audioChunksRef.current = [];
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
-      const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      mr.ondataavailable = e => { if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data); };
-      mr.start(1000);
-      mediaRecorderRef.current = mr;
-      setIsRecording(true);
-    } catch (_) {
-      // Recording permission denied or unavailable — continue without it
-    }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream; audioChunksRef.current = [];
+      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+      const mr = new MediaRecorder(stream, { mimeType: mime });
+      mr.ondataavailable = e => { if (e.data?.size > 0) audioChunksRef.current.push(e.data); };
+      mr.start(1000); recorderRef.current = mr; setIsRecording(true);
+    } catch {}
   }
 
   function stopRecording() {
     return new Promise(resolve => {
-      const mr = mediaRecorderRef.current;
+      const mr = recorderRef.current;
       if (!mr) { resolve(null); return; }
-      const chunks = audioChunksRef.current;
-      const mimeType = mr.mimeType || 'audio/webm';
-      mr.addEventListener('stop', () => {
-        const blob = new Blob(chunks, { type: mimeType });
-        audioBlobRef.current = blob;
-        resolve(blob);
-      }, { once: true });
-      try { mr.stop(); } catch (_) { resolve(null); }
-      mediaRecorderRef.current = null;
-      if (audioStreamRef.current) {
-        audioStreamRef.current.getTracks().forEach(t => t.stop());
-        audioStreamRef.current = null;
-      }
+      const chunks = audioChunksRef.current, mime = mr.mimeType || 'audio/webm';
+      mr.addEventListener('stop', () => resolve(new Blob(chunks, { type: mime })), { once: true });
+      try { mr.stop(); } catch { resolve(null); }
+      recorderRef.current = null;
+      if (audioStreamRef.current) { audioStreamRef.current.getTracks().forEach(t => t.stop()); audioStreamRef.current = null; }
       setIsRecording(false);
     });
   }
 
-  // ── AI Answer ──
   async function processQuestion(question) {
-    if (!question.trim() || question.trim() === lastQuestionRef.current) return;
-    lastQuestionRef.current = question.trim();
-
+    if (!question.trim() || question.trim() === lastQRef.current) return;
+    lastQRef.current = question.trim();
     const id = uid();
     const entry = { id, q: question.trim(), a: '', loading: true, streaming: false };
     setEntries(prev => [...prev, entry]);
     postToPopup({ t: 'add', entry: { ...entry } });
-
     try {
-      const sys = buildSystemPrompt(cfg);
       let started = false;
-      const finalAnswer = await callAnthropic(
-        cfg.apiKey, cfg.model,
+      const final = await callAnthropic(cfg.apiKey, cfg.model,
         [{ role: 'user', content: question }],
-        sys,
+        buildSystemPrompt(cfg),
         (partial) => {
           if (!started) {
             started = true;
@@ -692,8 +693,8 @@ function SessionScreen({ cfg, onEnd }) {
           }
         }
       );
-      setEntries(prev => prev.map(e => e.id === id ? { ...e, loading: false, streaming: false, a: finalAnswer } : e));
-      postToPopup({ t: 'upd', id, patch: { loading: false, streaming: false, a: finalAnswer } });
+      setEntries(prev => prev.map(e => e.id === id ? { ...e, loading: false, streaming: false, a: final } : e));
+      postToPopup({ t: 'upd', id, patch: { loading: false, streaming: false, a: final } });
     } catch (err) {
       const msg = `Error: ${err.message}`;
       setEntries(prev => prev.map(e => e.id === id ? { ...e, loading: false, streaming: false, a: msg } : e));
@@ -702,98 +703,62 @@ function SessionScreen({ cfg, onEnd }) {
     }
   }
 
-  // ── Speech Recognition ──
   function startListening() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { setMicError('Speech recognition not supported — use Chrome or Edge.'); return; }
-
-    const rec = new SR();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = 'en-US';
-    let finalBuffer = '';
-
+    const rec = new SR(); rec.continuous = true; rec.interimResults = true; rec.lang = 'en-US';
+    let finalBuf = '';
     rec.onstart = () => { setIsListening(true); setMicError(''); };
-    rec.onerror = (ev) => {
-      if (ev.error === 'not-allowed') setMicError('Microphone denied — allow it in browser settings.');
-      else if (ev.error !== 'no-speech') setMicError(`Mic error: ${ev.error}`);
-    };
-    rec.onend = () => {
-      setIsListening(false);
-      if (recognitionRef.current === rec) recognitionRef.current = null;
-    };
-    rec.onresult = (event) => {
+    rec.onerror = ev => { if (ev.error === 'not-allowed') setMicError('Microphone denied.'); else if (ev.error !== 'no-speech') setMicError(`Mic: ${ev.error}`); };
+    rec.onend   = () => { setIsListening(false); if (recognitionRef.current === rec) recognitionRef.current = null; };
+    rec.onresult = event => {
       let newFinal = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      for (let i = event.resultIndex; i < event.results.length; i++)
         if (event.results[i].isFinal) newFinal += event.results[i][0].transcript + ' ';
-      }
       if (!newFinal) return;
-
-      finalBuffer += newFinal;
-      const trimmed = finalBuffer.trim();
-
+      finalBuf += newFinal;
+      const trimmed = finalBuf.trim();
       setTranscript(prev => {
         const last = prev[prev.length - 1];
-        if (last && last.type === 'speech') return [...prev.slice(0, -1), { ...last, text: trimmed }];
+        if (last && last.type === 'speech') return [...prev.slice(0,-1), { ...last, text: trimmed }];
         return [...prev, { id: uid(), type: 'speech', text: trimmed }];
       });
-
       clearTimeout(debounceRef.current);
       if (autoAnswer && isQuestion(trimmed)) {
         debounceRef.current = setTimeout(() => {
-          const q = finalBuffer.trim();
-          finalBuffer = '';
+          const q = finalBuf.trim(); finalBuf = '';
           setTranscript(prev => [...prev, { id: uid(), type: 'question', text: q }]);
           processQuestion(q);
         }, 1500);
       } else {
-        debounceRef.current = setTimeout(() => { finalBuffer = ''; }, 5000);
+        debounceRef.current = setTimeout(() => { finalBuf = ''; }, 5000);
       }
     };
-
-    rec.start();
-    recognitionRef.current = rec;
-    // Start audio recording alongside speech recognition
+    rec.start(); recognitionRef.current = rec;
     startRecording();
   }
 
   function stopListening() {
     clearTimeout(debounceRef.current);
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch (_) {}
-      recognitionRef.current = null;
-    }
+    if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch {} recognitionRef.current = null; }
     setIsListening(false);
   }
 
-  function toggleMic() {
-    if (isListening) stopListening();
-    else startListening();
-  }
-
   function askManual() {
-    const q = manualInput.trim();
-    if (!q) return;
+    const q = manualInput.trim(); if (!q) return;
     setManualInput('');
     setTranscript(prev => [...prev, { id: uid(), type: 'question', text: q }]);
     processQuestion(q);
   }
 
-  function copyAnswer(text) {
-    navigator.clipboard.writeText(text).then(() => showStatus('Copied!'));
-  }
-
-  function downloadTranscript() {
-    const lines = transcriptRef.current;
-    if (!lines.length) { showStatus('No transcript yet'); return; }
+  function dlTranscript() {
+    const lines = transcriptRef.current; if (!lines.length) { showStatus('No transcript yet'); return; }
     const date = new Date().toISOString().slice(0,10);
-    const txt = `ZaqNova Interview CoPilot — Live Transcript\n${cfg.jobTitle} · ${formatTime(sessionTime)}\n${date}\n${'─'.repeat(50)}\n\n` +
-      lines.map(t => `[${t.type === 'question' ? 'QUESTION' : 'SPEECH  '}]  ${t.text}`).join('\n\n');
-    const blob = new Blob([txt], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `transcript-${date}.txt`; a.click();
-    URL.revokeObjectURL(url);
+    triggerDownload(
+      `ZaqNova Interview CoPilot — Live Transcript\n${cfg.jobTitle} \xb7 ${formatTime(sessionTimeRef.current)} \xb7 ${date}\n${'─'.repeat(50)}\n\n` +
+      lines.map(t => `[${t.type==='question'?'QUESTION':'SPEECH  '}]  ${t.text}`).join('\n\n'),
+      'text/plain', `transcript-${date}.txt`
+    );
   }
 
   async function handleEnd() {
@@ -801,182 +766,107 @@ function SessionScreen({ cfg, onEnd }) {
     clearInterval(timerRef.current);
     const audioBlob = await stopRecording();
     if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
-    onEnd({
-      entries: entriesRef.current,
-      transcript: transcriptRef.current,
-      duration: sessionTime,
-      audioBlob,
-    });
+    onEnd({ entries: entriesRef.current, transcript: transcriptRef.current, duration: sessionTimeRef.current, audioBlob });
   }
 
   return (
     <div className="h-screen bg-[#080c14] flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-[#0b1120] border-b border-[#0f172a] flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 bg-[#0b1120] border-b border-[#0f172a] flex-shrink-0 gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          {/* Mic button */}
-          <button
-            onClick={toggleMic}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              isListening
-                ? 'bg-red-500/20 text-red-400 border border-red-500/40 pulse-ring'
-                : 'bg-[#0f172a] text-slate-400 border border-[#1e293b] hover:border-slate-600'
-            }`}
-          >
+          <button onClick={() => isListening ? stopListening() : startListening()}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex-shrink-0 ${isListening ? 'bg-red-500/20 text-red-400 border border-red-500/40 pulse-ring' : 'bg-[#0f172a] text-slate-400 border border-[#1e293b] hover:border-slate-600'}`}>
             <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isListening ? 'bg-red-400' : 'bg-slate-600'}`} />
             {isListening ? 'Listening' : 'Start Mic'}
           </button>
-
-          {/* Recording indicator */}
           {isRecording && (
-            <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/30 pulse-ring-amber">
+            <div className="flex items-center gap-1 px-2 py-1 rounded border border-amber-500/30 bg-amber-500/10 pulse-ring-amber">
               <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
               <span className="text-xs text-amber-400 font-semibold">REC</span>
             </div>
           )}
-
-          {/* Timer */}
           <span className="text-slate-500 text-xs font-mono tabular-nums">{formatTime(sessionTime)}</span>
         </div>
-
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
-          {statusMsg && (
-            <span className="text-xs text-slate-400 bg-[#0f172a] px-2 py-1 rounded border border-[#1e293b]">{statusMsg}</span>
-          )}
-
-          {/* Download transcript (mid-session) */}
-          <button
-            onClick={downloadTranscript}
-            title="Download transcript"
-            className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs border border-[#1e293b] text-slate-500 hover:text-slate-300 hover:border-slate-600 transition-colors"
-          >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+          {statusMsg && <span className="text-xs text-slate-400 bg-[#0f172a] px-2 py-1 rounded border border-[#1e293b]">{statusMsg}</span>}
+          <button onClick={dlTranscript} title="Download transcript"
+            className="px-2 py-1.5 rounded-lg text-xs border border-[#1e293b] text-slate-500 hover:text-slate-300 hover:border-slate-600 transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
             </svg>
-            <span className="hidden sm:inline">Transcript</span>
           </button>
-
-          {/* Popup toggle */}
-          <button
-            onClick={togglePopup}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-              popupOpen && !popupHidden
-                ? 'text-green-400 border-green-500/40 bg-green-500/10'
-                : 'text-slate-500 border-[#1e293b] hover:border-slate-600'
-            }`}
-          >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8.689c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 0 1 0 1.954l-7.108 4.061A1.125 1.125 0 0 1 3 16.811V8.69ZM12.75 8.689c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 0 1 0 1.954l-7.108 4.061a1.125 1.125 0 0 1-1.683-.977V8.69Z" />
-            </svg>
-            {popupOpen && !popupHidden ? 'Answers ✓' : popupHidden ? 'Answers ·' : 'Open Answers'}
+          <button onClick={doTogglePopup}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${popupOpen && !popupHidden ? 'text-green-400 border-green-500/40 bg-green-500/10' : 'text-slate-500 border-[#1e293b] hover:border-slate-600'}`}>
+            {popupOpen && !popupHidden ? 'Answers ✓' : popupHidden ? 'Answers \xb7' : 'Answers'}
           </button>
-
-          {/* End session */}
-          <button
-            onClick={handleEnd}
-            className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 border border-[#1e293b] hover:border-red-500/50 hover:text-red-400 transition-colors"
-          >
+          <button onClick={handleEnd}
+            className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 border border-[#1e293b] hover:border-red-500/50 hover:text-red-400 transition-colors">
             End
           </button>
         </div>
       </div>
 
-      {/* Popup blocked */}
       {popupBlocked && (
-        <div className="mx-3 mt-2 flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 flex-shrink-0">
-          <svg className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z" />
-          </svg>
-          <div>
-            <p className="text-xs text-amber-400 font-medium">Popup blocked — allow popups for this page in your browser, then click "Open Answers".</p>
-            <button onClick={openPopup} className="mt-1.5 text-xs text-amber-400 border border-amber-500/40 px-2 py-0.5 rounded hover:bg-amber-500/10">Try Again</button>
-          </div>
+        <div className="mx-3 mt-2 flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 flex-shrink-0">
+          <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z"/></svg>
+          <p className="text-xs text-amber-400">Popup blocked — allow popups for this page, then click <button onClick={openPopup} className="underline">Try again</button>. Answers also show below.</p>
         </div>
       )}
+      {micError && <div className="mx-3 mt-2 bg-red-500/10 border border-red-500/30 rounded-xl p-2 text-xs text-red-400 flex-shrink-0">{micError}</div>}
 
-      {/* Mic error */}
-      {micError && (
-        <div className="mx-3 mt-2 bg-red-500/10 border border-red-500/30 rounded-xl p-2.5 text-xs text-red-400 flex-shrink-0">{micError}</div>
-      )}
-
-      {/* Two-panel layout */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
-
-        {/* LEFT: Live Transcript */}
         <div className="flex-1 flex flex-col overflow-hidden md:border-r border-[#0f172a] min-h-0">
           <div className="px-3 py-2 border-b border-[#0f172a] flex items-center justify-between flex-shrink-0">
-            <span className="text-xs text-slate-600 font-semibold uppercase tracking-wider">Live Transcript</span>
-            {/* Auto-answer toggle */}
+            <span className="text-xs text-slate-600 font-semibold uppercase tracking-wider">Transcript</span>
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-600">Auto-answer</span>
-              <button
-                onClick={() => setAutoAnswer(v => !v)}
-                className={`relative w-8 h-4 rounded-full transition-colors flex-shrink-0 ${autoAnswer ? 'bg-blue-600' : 'bg-slate-700'}`}
-                title={autoAnswer ? 'Auto-answer ON' : 'Auto-answer OFF'}
-              >
+              <button onClick={() => setAutoAnswer(v => !v)}
+                className={`relative w-8 h-4 rounded-full transition-colors flex-shrink-0 ${autoAnswer ? 'bg-blue-600' : 'bg-slate-700'}`}>
                 <div className={`toggle-knob absolute top-0.5 w-3 h-3 rounded-full bg-white ${autoAnswer ? 'translate-x-4' : 'translate-x-0.5'}`} />
               </button>
             </div>
           </div>
-
           <div className="flex-1 overflow-y-auto p-3 space-y-1.5 min-h-0">
             {transcript.length === 0 && (
               <div className="flex flex-col items-center justify-center h-36 text-slate-700 gap-2">
-                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
-                </svg>
-                <span className="text-xs text-center">Press "Start Mic" to begin transcribing</span>
+                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"/></svg>
+                <span className="text-xs">Press "Start Mic" to begin</span>
               </div>
             )}
             {transcript.map(t => (
               <div key={t.id} className="fade-up flex items-start gap-2">
-                <div className={`flex-shrink-0 w-1.5 h-1.5 rounded-full mt-1.5 ${t.type === 'question' ? 'bg-blue-400' : 'bg-slate-700'}`} />
-                <p className={`text-xs leading-relaxed ${t.type === 'question' ? 'text-slate-200 font-medium' : 'text-slate-500'}`}>
+                <div className={`flex-shrink-0 w-1.5 h-1.5 rounded-full mt-1.5 ${t.type==='question'?'bg-blue-400':'bg-slate-700'}`} />
+                <p className={`text-xs leading-relaxed ${t.type==='question'?'text-slate-200 font-medium':'text-slate-500'}`}>
                   {t.text}
-                  {t.type === 'question' && (
-                    <span className="ml-1.5 text-xs text-blue-400 bg-blue-400/10 px-1 py-0.5 rounded font-semibold">Q→AI</span>
-                  )}
+                  {t.type==='question' && <span className="ml-1.5 text-xs text-blue-400 bg-blue-400/10 px-1 py-0.5 rounded font-semibold">Q→AI</span>}
                 </p>
               </div>
             ))}
-            <div ref={transcriptEndRef} />
+            <div ref={txEndRef} />
           </div>
-
-          {/* Manual input */}
           <div className="p-2.5 border-t border-[#0f172a] flex gap-2 flex-shrink-0">
-            <input
-              type="text"
-              value={manualInput}
-              onChange={e => setManualInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askManual(); } }}
-              placeholder="Type a question to get an AI answer…"
+            <input type="text" value={manualInput} onChange={e => setManualInput(e.target.value)}
+              onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); askManual(); } }}
+              placeholder="Type a question for an AI answer…"
               className="flex-1 bg-[#0b1120] border border-[#1e293b] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 transition-colors"
             />
-            <button
-              onClick={askManual}
-              disabled={!manualInput.trim()}
-              className="px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold transition-colors"
-            >
+            <button onClick={askManual} disabled={!manualInput.trim()}
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white rounded-lg text-xs font-semibold transition-colors">
               Ask
             </button>
           </div>
         </div>
 
-        {/* RIGHT: Answers (inline fallback) */}
         <div className="flex-1 flex flex-col overflow-hidden md:max-w-sm lg:max-w-md min-h-0">
           <div className="px-3 py-2 border-b border-[#0f172a] flex items-center justify-between flex-shrink-0">
             <span className="text-xs text-slate-600 font-semibold uppercase tracking-wider">Answers</span>
             {popupOpen && !popupHidden
               ? <span className="text-xs text-green-400/50">→ Popup active</span>
-              : <span className="text-xs text-slate-700">Popup hidden/closed</span>
-            }
+              : <span className="text-xs text-slate-700">Popup closed</span>}
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
             {entries.length === 0 && (
               <div className="flex flex-col items-center justify-center h-36 text-slate-700 gap-2">
-                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
-                </svg>
+                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/></svg>
                 <span className="text-xs">AI answers appear here</span>
               </div>
             )}
@@ -985,22 +875,16 @@ function SessionScreen({ cfg, onEnd }) {
                 <p className="text-xs text-slate-600 font-semibold uppercase tracking-wider mb-1">Q</p>
                 <p className="text-xs text-slate-500 mb-2 leading-relaxed">{entry.q}</p>
                 <p className="text-xs text-blue-400 font-semibold uppercase tracking-wider mb-1">Answer</p>
-                {entry.loading ? (
-                  <div className="flex items-center gap-2 text-slate-600 text-xs py-1">
-                    <div className="w-3 h-3 border border-slate-700 border-t-blue-500 rounded-full spinner" />
-                    Generating…
-                  </div>
-                ) : (
-                  <>
-                    <p className={`text-xs text-slate-200 leading-relaxed whitespace-pre-wrap ${entry.streaming ? 'blink' : ''}`}>{entry.a}</p>
-                    {!entry.streaming && entry.a && !entry.a.startsWith('Error:') && (
-                      <button
-                        onClick={() => copyAnswer(entry.a)}
-                        className="mt-2 text-xs text-slate-600 border border-[#1e293b] px-2 py-0.5 rounded hover:text-white hover:border-slate-500 transition-colors"
-                      >Copy</button>
-                    )}
-                  </>
-                )}
+                {entry.loading
+                  ? <div className="flex items-center gap-2 text-slate-600 text-xs py-1"><div className="w-3 h-3 border border-slate-700 border-t-blue-500 rounded-full spinner" />Generating…</div>
+                  : <>
+                      <p className={`text-xs text-slate-200 leading-relaxed whitespace-pre-wrap ${entry.streaming?'blink':''}`}>{entry.a}</p>
+                      {!entry.streaming && entry.a && !entry.a.startsWith('Error:') && (
+                        <button onClick={() => { navigator.clipboard.writeText(entry.a); showStatus('Copied!'); }}
+                          className="mt-2 text-xs text-slate-600 border border-[#1e293b] px-2 py-0.5 rounded hover:text-white hover:border-slate-500 transition-colors">Copy</button>
+                      )}
+                    </>
+                }
               </div>
             ))}
           </div>
@@ -1010,170 +894,95 @@ function SessionScreen({ cfg, onEnd }) {
   );
 }
 
-// ─── NOTES SCREEN ────────────────────────────────────────────────────────────────
-function NotesScreen({ cfg, sessionData, onRestart }) {
-  const [notes, setNotes] = useState('');
-  const [generating, setGenerating] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState('');
+// ═══════════════════════════════════════════════════════════════════════════════
+// NOTES SCREEN
+// ═══════════════════════════════════════════════════════════════════════════════
+function NotesScreen({ cfg, sessionData, onRestart, onHistory }) {
+  const [notes, setNotes]    = useState('');
+  const [generating, setGen] = useState(false);
+  const [copied, setCopied]  = useState(false);
+  const [error, setError]    = useState('');
+  const date = new Date().toISOString().slice(0,10);
 
   useEffect(() => { generateNotes(); }, []);
 
   async function generateNotes() {
-    if (!sessionData?.entries?.length) {
-      setNotes('No questions were recorded in this session.');
-      return;
-    }
-    setGenerating(true);
+    if (!sessionData?.entries?.length) { setNotes('No questions were recorded in this session.'); return; }
+    setGen(true);
     try {
-      const qaPairs = sessionData.entries
-        .filter(e => e.a && !e.a.startsWith('Error:'))
-        .map((e, i) => `Q${i+1}: ${e.q}\nA${i+1}: ${e.a}`)
-        .join('\n\n');
-      const dur = formatTime(sessionData.duration || 0);
-      const prompt = `Here is a transcript of an interview session (${dur} long) for a "${cfg.jobTitle}" role:\n\n${qaPairs}\n\nPlease generate a structured post-session debrief with:\n1. **Session Overview** — role, duration, number of questions covered\n2. **Key Questions & Best Answers** — top 3–5, condensed to 1–2 sentences each\n3. **Topics & Themes Covered** — bullet list\n4. **Action Items** — what to research, prepare, or improve before next interview\n5. **Strengths Demonstrated** — specific examples from the session\n6. **Areas to Improve** — honest assessment\n\nBe specific and actionable.`;
-      const text = await callAnthropic(
-        cfg.apiKey, cfg.model,
-        [{ role: 'user', content: prompt }],
-        'You are an expert interview coach producing a post-session debrief. Be honest, specific, and actionable.',
+      const qaPairs = sessionData.entries.filter(e => e.a && !e.a.startsWith('Error:')).map((e,i) => `Q${i+1}: ${e.q}\nA${i+1}: ${e.a}`).join('\n\n');
+      const text = await callAnthropic(cfg.apiKey, cfg.model,
+        [{ role:'user', content:`Interview for "${cfg.jobTitle}" (${formatTime(sessionData.duration||0)}):\n\n${qaPairs}\n\nGenerate a structured post-session debrief:\n1. Session Overview\n2. Key Questions & Best Answers (top 3–5)\n3. Topics Covered\n4. Action Items\n5. Strengths Demonstrated\n6. Areas to Improve\n\nBe specific and actionable.` }],
+        'You are an expert interview coach writing a post-session debrief. Be honest, specific, actionable.',
         null
       );
       setNotes(text);
     } catch (err) {
       setError(`Notes generation failed: ${err.message}`);
-      const fallback = sessionData.entries
-        .filter(e => e.a)
-        .map((e, i) => `Question ${i+1}:\n${e.q}\n\nAnswer:\n${e.a}`)
-        .join('\n\n' + '─'.repeat(40) + '\n\n');
-      setNotes(fallback || 'No answers recorded.');
+      setNotes(sessionData.entries.filter(e => e.a).map((e,i) => `Q${i+1}: ${e.q}\n\nA: ${e.a}`).join('\n\n─────\n\n') || 'No answers recorded.');
     }
-    setGenerating(false);
+    setGen(false);
   }
 
-  const date = new Date().toISOString().slice(0,10);
-
-  function copyNotes() {
-    navigator.clipboard.writeText(notes).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  function dlNotes() {
+    const t = `ZaqNova Interview CoPilot — Session Notes\n${cfg.jobTitle} \xb7 ${formatTime(sessionData?.duration||0)} \xb7 ${date}\n${'═'.repeat(55)}\n\n${notes}`;
+    triggerDownload(t, 'text/plain', `notes-${date}.txt`);
   }
 
-  function downloadNotes() {
-    const title = `ZaqNova Interview CoPilot — Session Notes`;
-    const sub = `${cfg.jobTitle} · ${formatTime(sessionData?.duration || 0)} · ${date}`;
-    const content = `${title}\n${sub}\n${'═'.repeat(Math.max(title.length, sub.length))}\n\n${notes}`;
-    triggerDownload(content, 'text/plain', `interview-notes-${date}.txt`);
+  function dlTranscript() {
+    const lines = sessionData?.transcript || []; if (!lines.length) return;
+    const t = `ZaqNova Interview CoPilot — Transcript\n${cfg.jobTitle} \xb7 ${formatTime(sessionData?.duration||0)} \xb7 ${date}\n${'─'.repeat(50)}\n\n` +
+      lines.map(l => `[${l.type==='question'?'QUESTION':'SPEECH  '}]  ${l.text}`).join('\n\n');
+    triggerDownload(t, 'text/plain', `transcript-${date}.txt`);
   }
 
-  function downloadTranscript() {
-    const lines = sessionData?.transcript || [];
-    if (!lines.length) return;
-    const txt = `ZaqNova Interview CoPilot — Transcript\n${cfg.jobTitle} · ${formatTime(sessionData?.duration || 0)} · ${date}\n${'─'.repeat(50)}\n\n` +
-      lines.map(t => `[${t.type === 'question' ? 'QUESTION' : 'SPEECH  '}]  ${t.text}`).join('\n\n');
-    triggerDownload(txt, 'text/plain', `interview-transcript-${date}.txt`);
-  }
-
-  function downloadRecording() {
-    const blob = sessionData?.audioBlob;
-    if (!blob) return;
+  function dlRecording() {
+    const blob = sessionData?.audioBlob; if (!blob) return;
     const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'mp4' : 'webm';
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `interview-recording-${date}.${ext}`; a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function triggerDownload(content, type, filename) {
-    const blob = new Blob([content], { type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename; a.click();
-    URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = `recording-${date}.${ext}`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   return (
     <div className="min-h-screen bg-[#080c14] flex flex-col">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-[#0b1120] border-b border-[#0f172a] sticky top-0 z-10 flex-wrap gap-2">
         <div>
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-bold text-blue-400 tracking-wider">ZAQNOVA</span>
             <span className="text-xs text-slate-600">Session Notes</span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">{cfg.jobTitle} · {formatTime(sessionData?.duration || 0)}</p>
+          <p className="text-xs text-slate-500 mt-0.5">{cfg.jobTitle} \xb7 {formatTime(sessionData?.duration||0)} \xb7 Saved to history ✓</p>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
-          <button
-            onClick={copyNotes}
-            disabled={!notes || generating}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors disabled:opacity-30"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
-            </svg>
-            {copied ? 'Copied!' : 'Copy Notes'}
+          <button onClick={() => { navigator.clipboard.writeText(notes).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }} disabled={!notes||generating}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors disabled:opacity-30">
+            {copied ? '✓ Copied' : 'Copy Notes'}
           </button>
-          <button
-            onClick={downloadNotes}
-            disabled={!notes || generating}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors disabled:opacity-30"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-            </svg>
+          <button onClick={dlNotes} disabled={!notes||generating}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors disabled:opacity-30">
             Notes .txt
           </button>
           {(sessionData?.transcript?.length > 0) && (
-            <button
-              onClick={downloadTranscript}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-              </svg>
-              Transcript .txt
-            </button>
+            <button onClick={dlTranscript} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors">Transcript .txt</button>
           )}
           {sessionData?.audioBlob && (
-            <button
-              onClick={downloadRecording}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-              </svg>
-              Recording .webm
-            </button>
+            <button onClick={dlRecording} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-colors">Recording .webm</button>
           )}
-          <button
-            onClick={onRestart}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors"
-          >
-            New Session
-          </button>
+          <button onClick={onHistory} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors">History</button>
+          <button onClick={onRestart} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors">New Session</button>
         </div>
       </div>
 
       <div className="flex-1 max-w-3xl mx-auto w-full p-4 md:p-6">
-        {error && (
-          <div className="mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-400">{error}</div>
-        )}
-
-        {generating ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-4 text-slate-500">
-            <div className="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full spinner" />
-            <span className="text-sm">Generating session debrief…</span>
-          </div>
-        ) : (
-          <div className="bg-[#0b1120] border border-[#0f172a] rounded-2xl p-5 md:p-6">
-            <pre className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">{notes}</pre>
-          </div>
-        )}
-
-        {/* Full Q&A log */}
+        {error && <div className="mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-400">{error}</div>}
+        {generating
+          ? <div className="flex flex-col items-center justify-center py-24 gap-4 text-slate-500"><div className="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full spinner" /><span className="text-sm">Generating debrief…</span></div>
+          : <div className="bg-[#0b1120] border border-[#0f172a] rounded-2xl p-5 md:p-6"><pre className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">{notes}</pre></div>
+        }
         {!generating && sessionData?.entries?.filter(e => e.a && !e.a.startsWith('Error:')).length > 0 && (
           <div className="mt-6">
-            <h3 className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3">
-              Full Q&amp;A Log ({sessionData.entries.filter(e => e.a && !e.a.startsWith('Error:')).length} answered)
-            </h3>
+            <h3 className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3">Full Q&amp;A Log</h3>
             <div className="space-y-3">
               {sessionData.entries.filter(e => e.a && !e.a.startsWith('Error:')).map((e, i) => (
                 <div key={e.id} className="bg-[#0b1120] border border-[#0f172a] rounded-xl p-4">
@@ -1191,17 +1000,165 @@ function NotesScreen({ cfg, sessionData, onRestart }) {
   );
 }
 
-// ─── APP ROOT ─────────────────────────────────────────────────────────────────────
-function App() {
-  const [screen, setScreen] = useState('setup');
-  const [cfg, setCfg] = useState(null);
-  const [sessionData, setSessionData] = useState(null);
+// ═══════════════════════════════════════════════════════════════════════════════
+// HISTORY SCREEN
+// ═══════════════════════════════════════════════════════════════════════════════
+function HistoryScreen({ onBack }) {
+  const [sessions, setSessions]           = useState([]);
+  const [expanded, setExpanded]           = useState(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  return screen === 'setup'
-    ? <SetupScreen onStart={c => { setCfg(c); setScreen('session'); }} />
-    : screen === 'session'
-    ? <SessionScreen cfg={cfg} onEnd={d => { setSessionData(d); setScreen('notes'); }} />
-    : <NotesScreen cfg={cfg} sessionData={sessionData} onRestart={() => { setSessionData(null); setScreen('setup'); }} />;
+  useEffect(() => { setSessions(loadHistory().sort((a,b) => b.savedAt - a.savedAt)); }, []);
+
+  function handleDelete(id) { deleteHistoryItem(id); setSessions(prev => prev.filter(s => s.id !== id)); }
+
+  function handleClearAll() {
+    try { localStorage.removeItem(LS_HISTORY); } catch {}
+    setSessions([]); setShowClearConfirm(false);
+  }
+
+  function dlTranscript(s) {
+    const date = new Date(s.savedAt).toISOString().slice(0,10);
+    triggerDownload(
+      `ZaqNova Interview CoPilot — Transcript\n${s.jobTitle} \xb7 ${formatTime(s.duration)} \xb7 ${date}\n${'─'.repeat(50)}\n\n` +
+      (s.transcriptLines||[]).map(t => `[${t.type==='question'?'QUESTION':'SPEECH  '}]  ${t.text}`).join('\n\n'),
+      'text/plain', `transcript-${date}.txt`
+    );
+  }
+
+  function dlQA(s) {
+    const date = new Date(s.savedAt).toISOString().slice(0,10);
+    triggerDownload(
+      `ZaqNova Interview CoPilot — Q&A Log\n${s.jobTitle} \xb7 ${formatTime(s.duration)} \xb7 ${date}\n${'═'.repeat(55)}\n\n` +
+      (s.qaEntries||[]).map((e,i) => `Q${i+1}: ${e.q}\n\nA${i+1}: ${e.a}`).join('\n\n' + '─'.repeat(40) + '\n\n'),
+      'text/plain', `qa-log-${date}.txt`
+    );
+  }
+
+  function daysLeft(savedAt) {
+    const ms = HISTORY_TTL_MS - (Date.now() - savedAt);
+    return Math.max(0, Math.ceil(ms / (24*60*60*1000)));
+  }
+
+  return (
+    <div className="min-h-screen bg-[#080c14] flex flex-col">
+      <div className="flex items-center justify-between px-4 py-3 bg-[#0b1120] border-b border-[#0f172a] sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="flex items-center gap-1 text-xs text-slate-500 hover:text-white transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/></svg>
+            Back
+          </button>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-blue-400 tracking-wider">ZAQNOVA</span>
+              <span className="text-xs text-slate-600">Session History</span>
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">Auto-deleted after 30 days</p>
+          </div>
+        </div>
+        {sessions.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-600">{sessions.length} session{sessions.length!==1?'s':''}</span>
+            {!showClearConfirm
+              ? <button onClick={() => setShowClearConfirm(true)} className="text-xs text-slate-600 hover:text-red-400 transition-colors px-2 py-1 border border-[#1e293b] rounded-lg">Clear all</button>
+              : <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500">Sure?</span>
+                  <button onClick={handleClearAll} className="text-xs text-red-400 border border-red-500/40 px-2 py-1 rounded-lg hover:bg-red-500/10">Yes, delete all</button>
+                  <button onClick={() => setShowClearConfirm(false)} className="text-xs text-slate-500 border border-[#1e293b] px-2 py-1 rounded-lg">Cancel</button>
+                </div>
+            }
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 max-w-3xl mx-auto w-full p-4 md:p-6">
+        {sessions.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 gap-3 text-slate-700">
+            <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+            </svg>
+            <span className="text-sm">No saved sessions yet</span>
+            <span className="text-xs text-slate-700 text-center max-w-xs">Sessions are automatically saved when you end a session. They're kept for 30 days.</span>
+            <button onClick={onBack} className="mt-2 text-xs text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-lg hover:bg-blue-500/10 transition-colors">← Back to Setup</button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {sessions.map(s => {
+              const dl = daysLeft(s.savedAt);
+              const dateStr = new Date(s.savedAt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
+              return (
+                <div key={s.id} className="bg-[#0b1120] border border-[#0f172a] rounded-xl overflow-hidden">
+                  <div className="p-4 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">{s.jobTitle}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-xs text-slate-500">{dateStr}</span>
+                        <span className="text-xs text-slate-600">\xb7</span>
+                        <span className="text-xs text-slate-500">{formatTime(s.duration)}</span>
+                        <span className="text-xs text-slate-600">\xb7</span>
+                        <span className="text-xs text-slate-500">{s.qaEntries?.length||0} Q&amp;As</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${dl <= 3 ? 'text-red-400 bg-red-500/10' : dl <= 7 ? 'text-amber-400 bg-amber-500/10' : 'text-slate-600 bg-[#0f172a]'}`}>
+                          {dl}d left
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                      {(s.transcriptLines?.length > 0) && (
+                        <button onClick={() => dlTranscript(s)} className="text-xs text-slate-500 border border-[#1e293b] px-2 py-1 rounded-lg hover:text-white hover:border-slate-600 transition-colors">Transcript</button>
+                      )}
+                      {(s.qaEntries?.length > 0) && (
+                        <button onClick={() => dlQA(s)} className="text-xs text-slate-500 border border-[#1e293b] px-2 py-1 rounded-lg hover:text-white hover:border-slate-600 transition-colors">Q&amp;A</button>
+                      )}
+                      <button onClick={() => setExpanded(expanded === s.id ? null : s.id)}
+                        className={`text-xs px-2 py-1 rounded-lg border transition-colors ${expanded===s.id?'text-blue-400 border-blue-500/40 bg-blue-500/10':'text-slate-500 border-[#1e293b] hover:text-white hover:border-slate-600'}`}>
+                        {expanded === s.id ? 'Hide' : 'View'}
+                      </button>
+                      <button onClick={() => handleDelete(s.id)} className="text-xs text-slate-600 border border-[#1e293b] px-2 py-1 rounded-lg hover:text-red-400 hover:border-red-500/40 transition-colors">Delete</button>
+                    </div>
+                  </div>
+                  {expanded === s.id && (
+                    <div className="border-t border-[#0f172a] p-4 space-y-3 bg-[#080c14]/50">
+                      {(!s.qaEntries || s.qaEntries.length === 0) ? (
+                        <p className="text-xs text-slate-600 text-center py-4">No Q&amp;A entries in this session.</p>
+                      ) : s.qaEntries.map((e, i) => (
+                        <div key={i} className="border border-[#0f172a] rounded-lg p-3">
+                          <p className="text-xs text-slate-600 font-semibold mb-1">Q{i+1}</p>
+                          <p className="text-xs text-slate-400 mb-2 leading-relaxed">{e.q}</p>
+                          <p className="text-xs text-blue-400/70 font-semibold mb-1">Answer</p>
+                          <p className="text-xs text-slate-300 leading-relaxed">{e.a}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// APP ROOT
+// ═══════════════════════════════════════════════════════════════════════════════
+function App() {
+  const [screen, setScreen]    = useState('setup');
+  const [cfg, setCfg]          = useState(null);
+  const [sessionData, setData] = useState(null);
+
+  function handleEnd(data) {
+    if (cfg) saveToHistory(data, cfg);
+    setData(data);
+    setScreen('notes');
+  }
+
+  if (screen === 'setup')   return <SetupScreen onStart={c => { setCfg(c); setScreen('session'); }} onHistory={() => setScreen('history')} />;
+  if (screen === 'session') return <SessionScreen cfg={cfg} onEnd={handleEnd} />;
+  if (screen === 'notes')   return <NotesScreen cfg={cfg} sessionData={sessionData} onRestart={() => { setData(null); setScreen('setup'); }} onHistory={() => setScreen('history')} />;
+  if (screen === 'history') return <HistoryScreen onBack={() => setScreen(sessionData ? 'notes' : 'setup')} />;
+  return null;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
