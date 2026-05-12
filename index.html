@@ -49,6 +49,8 @@ const { useState, useEffect, useRef, useCallback } = React;
 // CONSTANTS
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const LS_API_KEY      = 'zaqnova_api_key';
+const LS_OPENAI_KEY   = 'zaqnova_openai_key';
+const LS_GEMINI_KEY   = 'zaqnova_gemini_key';
 const LS_RESUME_DOCS  = 'zaqnova_resume_docs';
 const LS_CONTEXT_DOCS = 'zaqnova_context_docs';
 const LS_HISTORY      = 'zaqnova_history';
@@ -57,6 +59,32 @@ const MAX_DOC_CHARS   = 15000;
 const MAX_RESUME_DOCS = 5;
 const MAX_CTX_DOCS    = 8;
 const HISTORY_TTL_MS  = 30 * 24 * 60 * 60 * 1000;
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// MODELS
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+const MODELS = [
+  // Anthropic
+  { id: 'claude-sonnet-4-20250514',  provider:'anthropic', group:'Anthropic', label:'Claude Sonnet 4',  range:'~$0.10â€“$0.25', note:'Recommended' },
+  { id: 'claude-haiku-4-5-20251001', provider:'anthropic', group:'Anthropic', label:'Claude Haiku 4.5', range:'~$0.02â€“$0.06', note:'Fastest & cheapest' },
+  { id: 'claude-opus-4-5',           provider:'anthropic', group:'Anthropic', label:'Claude Opus 4.5',  range:'~$0.50â€“$1.20', note:'Most capable' },
+  // OpenAI
+  { id: 'gpt-4o',                    provider:'openai',    group:'OpenAI',    label:'GPT-4o',           range:'~$0.15â€“$0.40', note:'Recommended' },
+  { id: 'gpt-4o-mini',               provider:'openai',    group:'OpenAI',    label:'GPT-4o mini',      range:'~$0.02â€“$0.06', note:'Fast & cheap' },
+  { id: 'o4-mini',                   provider:'openai',    group:'OpenAI',    label:'o4-mini',          range:'~$0.10â€“$0.30', note:'Reasoning' },
+  // Google Gemini
+  { id: 'gemini-2.0-flash',          provider:'gemini',    group:'Google',    label:'Gemini 2.0 Flash', range:'~$0.01â€“$0.03', note:'Fastest' },
+  { id: 'gemini-1.5-pro-latest',     provider:'gemini',    group:'Google',    label:'Gemini 1.5 Pro',   range:'~$0.08â€“$0.25', note:'Powerful' },
+  { id: 'gemini-1.5-flash-latest',   provider:'gemini',    group:'Google',    label:'Gemini 1.5 Flash', range:'~$0.02â€“$0.06', note:'Fast' },
+];
+function getProvider(modelId) { return MODELS.find(m => m.id === modelId)?.provider || 'anthropic'; }
+function getModelMeta(modelId) { return MODELS.find(m => m.id === modelId) || MODELS[0]; }
+function getActiveKey(cfg) {
+  const p = getProvider(cfg.model);
+  if (p === 'openai') return cfg.openaiKey || '';
+  if (p === 'gemini') return cfg.geminiKey || '';
+  return cfg.apiKey || '';
+}
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // POPUP HTML
@@ -254,6 +282,66 @@ async function callAnthropic(apiKey, model, messages, system, onChunk) {
   return full;
 }
 
+async function callOpenAI(apiKey, model, messages, system, onChunk) {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model, max_tokens: 600, stream: true,
+      messages: [
+        ...(system ? [{ role: 'system', content: system }] : []),
+        ...messages,
+      ],
+    }),
+  });
+  if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err?.error?.message || `OpenAI error ${res.status}`); }
+  const reader = res.body.getReader(); const dec = new TextDecoder();
+  let buf = '', full = '';
+  while (true) {
+    const { done, value } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n'); buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim(); if (data === '[DONE]') continue;
+      try { const p = JSON.parse(data); const d = p.choices?.[0]?.delta?.content; if (d) { full += d; onChunk?.(full); } } catch {}
+    }
+  }
+  return full;
+}
+
+async function callGemini(apiKey, model, messages, system, onChunk) {
+  const contents = messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+  const body = { contents, generationConfig: { maxOutputTokens: 600 } };
+  if (system) body.systemInstruction = { parts: [{ text: system }] };
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}&alt=sse`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+  );
+  if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err?.error?.message || `Gemini error ${res.status}`); }
+  const reader = res.body.getReader(); const dec = new TextDecoder();
+  let buf = '', full = '';
+  while (true) {
+    const { done, value } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n'); buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim(); if (!data) continue;
+      try { const p = JSON.parse(data); const t = p.candidates?.[0]?.content?.parts?.[0]?.text; if (t) { full += t; onChunk?.(full); } } catch {}
+    }
+  }
+  return full;
+}
+
+function callAI(cfg, messages, system, onChunk) {
+  const key = getActiveKey(cfg);
+  const p = getProvider(cfg.model);
+  if (p === 'openai') return callOpenAI(key, cfg.model, messages, system, onChunk);
+  if (p === 'gemini') return callGemini(key, cfg.model, messages, system, onChunk);
+  return callAnthropic(key, cfg.model, messages, system, onChunk);
+}
+
 async function callAnthropicVision(apiKey, model, base64Image, prompt) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -275,6 +363,47 @@ async function callAnthropicVision(apiKey, model, base64Image, prompt) {
   if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err?.error?.message || `API error ${res.status}`); }
   const data = await res.json();
   return data.content?.[0]?.text?.trim() || '';
+}
+
+async function callOpenAIVision(apiKey, model, base64Image, prompt) {
+  const vModel = model === 'gpt-4o-mini' ? 'gpt-4o-mini' : 'gpt-4o';
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: vModel, max_tokens: 400,
+      messages: [{ role: 'user', content: [
+        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } },
+        { type: 'text', text: prompt }
+      ]}]
+    }),
+  });
+  if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err?.error?.message || `OpenAI vision error ${res.status}`); }
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content?.trim() || '';
+}
+
+async function callGeminiVision(apiKey, model, base64Image, prompt) {
+  const vModel = model.includes('flash') ? 'gemini-2.0-flash' : 'gemini-1.5-pro-latest';
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${vModel}:generateContent?key=${apiKey}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [
+        { inline_data: { mime_type: 'image/jpeg', data: base64Image } },
+        { text: prompt }
+      ]}]}) }
+  );
+  if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err?.error?.message || `Gemini vision error ${res.status}`); }
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+}
+
+function callAIVision(cfg, base64Image, prompt) {
+  const key = getActiveKey(cfg);
+  const p = getProvider(cfg.model);
+  if (p === 'openai') return callOpenAIVision(key, cfg.model, base64Image, prompt);
+  if (p === 'gemini') return callGeminiVision(key, cfg.model, base64Image, prompt);
+  return callAnthropicVision(key, cfg.model, base64Image, prompt);
 }
 
 function buildSystemPrompt(cfg) {
@@ -364,15 +493,66 @@ function DocumentList({ docs, onChange, label, maxDocs, hint }) {
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // SETUP SCREEN
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-const COST_ESTIMATES = [
-  { model: 'claude-sonnet-4-20250514',  label: 'Sonnet 4',  range: '~$0.10â€“$0.25', note: 'Recommended' },
-  { model: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', range: '~$0.02â€“$0.06', note: 'Fastest & cheapest' },
-  { model: 'claude-opus-4-5',           label: 'Opus 4.5',  range: '~$0.50â€“$1.20', note: 'Most capable' },
-];
+const PROVIDER_LABELS = { anthropic: 'Anthropic', openai: 'OpenAI', gemini: 'Google' };
+const PROVIDER_COLORS = { anthropic: 'orange', openai: 'green', gemini: 'blue' };
+const PROVIDER_PLACEHOLDERS = { anthropic: 'sk-ant-api03-â€¦', openai: 'sk-proj-â€¦', gemini: 'AIzaSyâ€¦' };
+const PROVIDER_LINKS = {
+  anthropic: 'https://console.anthropic.com/settings/keys',
+  openai: 'https://platform.openai.com/api-keys',
+  gemini: 'https://aistudio.google.com/app/apikey',
+};
+
+function ApiKeyField({ provider, value, onChange, isActive }) {
+  const [remember, setRemember] = useState(() => !!localStorage.getItem(`zaqnova_${provider}_key`));
+  const colors = { anthropic: 'amber', openai: 'emerald', gemini: 'blue' };
+  const c = colors[provider];
+  const borderCls = isActive
+    ? `border-${c}-500/50 bg-${c}-500/5`
+    : 'border-[#0f172a]';
+  function handleChange(val) {
+    onChange(val);
+    if (remember) { if (val.trim()) localStorage.setItem(`zaqnova_${provider}_key`, val.trim()); else localStorage.removeItem(`zaqnova_${provider}_key`); }
+  }
+  function handleRemember(checked) {
+    setRemember(checked);
+    if (checked && value.trim()) localStorage.setItem(`zaqnova_${provider}_key`, value.trim());
+    else localStorage.removeItem(`zaqnova_${provider}_key`);
+  }
+  const lsKey = `zaqnova_${provider}_key`;
+  return (
+    <div className={`rounded-xl border p-3 transition-all ${borderCls}`}>
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-400">{PROVIDER_LABELS[provider]}</span>
+          {isActive && <span className={`text-xs px-1.5 py-0.5 rounded font-semibold text-${c}-400 bg-${c}-500/10`}>Active</span>}
+        </div>
+        <a href={PROVIDER_LINKS[provider]} target="_blank" rel="noopener noreferrer"
+          className="text-xs text-slate-600 hover:text-blue-400 transition-colors">Get key â†—</a>
+      </div>
+      <input type="password" value={value} onChange={e => handleChange(e.target.value)}
+        placeholder={PROVIDER_PLACEHOLDERS[provider]}
+        className={`w-full bg-[#080c14] border rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none transition-colors ${remember && value ? 'border-green-500/40' : 'border-[#1e293b] focus:border-blue-500/40'}`} />
+      <div className="flex items-center justify-between mt-1.5">
+        <label className="flex items-center gap-1.5 cursor-pointer select-none">
+          <div onClick={() => handleRemember(!remember)}
+            className={`relative w-7 h-3.5 rounded-full transition-colors cursor-pointer ${remember ? 'bg-green-600' : 'bg-slate-700'}`}>
+            <div className={`toggle-knob absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white ${remember ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+          </div>
+          <span className="text-xs text-slate-600">{remember && value ? <span className="text-green-400/80">Saved</span> : 'Save'}</span>
+        </label>
+        {remember && value && (
+          <button onClick={() => { handleChange(''); handleRemember(false); }}
+            className="text-xs text-slate-700 hover:text-red-400 transition-colors">Forget</button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function SetupScreen({ onStart, onHistory }) {
   const [apiKey, setApiKey]           = useLocalStorage(LS_API_KEY, '');
-  const [rememberKey, setRememberKey] = useState(() => !!localStorage.getItem(LS_API_KEY));
+  const [openaiKey, setOpenaiKey]     = useLocalStorage(LS_OPENAI_KEY, '');
+  const [geminiKey, setGeminiKey]     = useLocalStorage(LS_GEMINI_KEY, '');
   const [resumeDocs, setResumeDocs]   = useLocalStorage(LS_RESUME_DOCS, []);
   const [contextDocs, setContextDocs] = useLocalStorage(LS_CONTEXT_DOCS, []);
   const [model, setModel]             = useLocalStorage(LS_MODEL, 'claude-sonnet-4-20250514');
@@ -381,23 +561,20 @@ function SetupScreen({ onStart, onHistory }) {
   const [error, setError]             = useState('');
   const [showCost, setShowCost]       = useState(false);
   const historyCount = loadHistory().length;
+  const activeProvider = getProvider(model);
+  const selectedMeta = getModelMeta(model);
 
-  function handleRememberToggle(checked) {
-    setRememberKey(checked);
-    if (checked && apiKey.trim()) localStorage.setItem(LS_API_KEY, apiKey.trim());
-    else localStorage.removeItem(LS_API_KEY);
-  }
-  function handleApiKeyChange(val) {
-    setApiKey(val);
-    if (rememberKey) { if (val.trim()) localStorage.setItem(LS_API_KEY, val.trim()); else localStorage.removeItem(LS_API_KEY); }
-  }
+  function getKey(p) { if (p==='openai') return openaiKey; if (p==='gemini') return geminiKey; return apiKey; }
+
   function handleStart() {
-    if (!apiKey.trim()) { setError('Please enter your Anthropic API key.'); return; }
+    const key = getKey(activeProvider);
+    if (!key.trim()) { setError(`Please enter your ${PROVIDER_LABELS[activeProvider]} API key for the selected model.`); return; }
     if (!jobTitle.trim()) { setError('Please enter the job title.'); return; }
     setError('');
-    onStart({ apiKey: apiKey.trim(), jobTitle: jobTitle.trim(), context, resumeDocs, contextDocs, model });
+    onStart({ apiKey: apiKey.trim(), openaiKey: openaiKey.trim(), geminiKey: geminiKey.trim(), jobTitle: jobTitle.trim(), context, resumeDocs, contextDocs, model });
   }
-  const selectedCost = COST_ESTIMATES.find(c => c.model === model);
+
+  const groups = ['Anthropic', 'OpenAI', 'Google'];
 
   return (
     <div className="min-h-screen bg-[#080c14] flex items-center justify-center p-4">
@@ -418,23 +595,33 @@ function SetupScreen({ onStart, onHistory }) {
         </div>
 
         <div className="bg-[#0b1120] border border-[#0f172a] rounded-2xl p-6 space-y-5">
-          {/* API Key */}
+
+          {/* Model â€” shown first so key fields highlight correctly */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Anthropic API Key</label>
-            <input type="password" value={apiKey} onChange={e => handleApiKeyChange(e.target.value)} placeholder="sk-ant-..."
-              className={`w-full bg-[#080c14] border rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none transition-colors ${rememberKey && apiKey ? 'border-green-500/40 focus:border-green-500/60' : 'border-[#1e293b] focus:border-blue-500/50'}`} />
-            <div className="flex items-center justify-between mt-2">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <div onClick={() => handleRememberToggle(!rememberKey)}
-                  className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer flex-shrink-0 ${rememberKey ? 'bg-green-600' : 'bg-slate-700'}`}>
-                  <div className={`toggle-knob absolute top-0.5 w-3 h-3 rounded-full bg-white ${rememberKey ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                </div>
-                <span className="text-xs text-slate-500">{rememberKey ? <span className="text-green-400">Saved on this device</span> : 'Remember on this device'}</span>
-              </label>
-              {rememberKey && apiKey && (
-                <button onClick={() => { handleApiKeyChange(''); setRememberKey(false); localStorage.removeItem(LS_API_KEY); }}
-                  className="text-xs text-slate-600 hover:text-red-400 transition-colors">Forget key</button>
-              )}
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">AI Model</label>
+            <select value={model} onChange={e => setModel(e.target.value)}
+              className="w-full bg-[#080c14] border border-[#1e293b] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors">
+              {groups.map(g => (
+                <optgroup key={g} label={`â”€â”€ ${g} â”€â”€`}>
+                  {MODELS.filter(m => m.group === g).map(m => (
+                    <option key={m.id} value={m.id}>{m.label} â€” {m.note}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <p className="text-xs text-slate-600 mt-1.5">Estimated cost / 30 min session: <span className="text-blue-400 font-semibold">{selectedMeta?.range}</span> Â· {selectedMeta?.note}</p>
+          </div>
+
+          {/* API Keys */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">API Keys</label>
+              <span className="text-xs text-slate-600">Fill the key for your chosen model</span>
+            </div>
+            <div className="space-y-2">
+              <ApiKeyField provider="anthropic" value={apiKey} onChange={setApiKey} isActive={activeProvider==='anthropic'} />
+              <ApiKeyField provider="openai"    value={openaiKey} onChange={setOpenaiKey} isActive={activeProvider==='openai'} />
+              <ApiKeyField provider="gemini"    value={geminiKey} onChange={setGeminiKey} isActive={activeProvider==='gemini'} />
             </div>
           </div>
 
@@ -448,22 +635,11 @@ function SetupScreen({ onStart, onHistory }) {
           {/* Docs */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="bg-[#080c14] rounded-xl border border-[#0f172a] p-4">
-              <DocumentList docs={resumeDocs} onChange={setResumeDocs} label="Resume Documents" maxDocs={MAX_RESUME_DOCS} hint="Upload resume(s) \xb7 .pdf .docx .txt" />
+              <DocumentList docs={resumeDocs} onChange={setResumeDocs} label="Resume Documents" maxDocs={MAX_RESUME_DOCS} hint="Upload resume(s) Â· .pdf .docx .txt" />
             </div>
             <div className="bg-[#080c14] rounded-xl border border-[#0f172a] p-4">
               <DocumentList docs={contextDocs} onChange={setContextDocs} label="Context Documents" maxDocs={MAX_CTX_DOCS} hint="Job desc, notes, prep docsâ€¦" />
             </div>
-          </div>
-
-          {/* Model */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">AI Model</label>
-            <select value={model} onChange={e => setModel(e.target.value)}
-              className="w-full bg-[#080c14] border border-[#1e293b] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors">
-              <option value="claude-sonnet-4-20250514">claude-sonnet-4-20250514 â€” Recommended</option>
-              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001 â€” Fastest &amp; cheapest</option>
-              <option value="claude-opus-4-5">claude-opus-4-5 â€” Most capable</option>
-            </select>
           </div>
 
           {/* Extra Instructions */}
@@ -491,21 +667,23 @@ function SetupScreen({ onStart, onHistory }) {
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="bg-[#0b1120] border border-[#0f172a] rounded-xl overflow-hidden">
             <button onClick={() => setShowCost(v => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-[#0f172a]/50 transition-colors">
-              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Cost / 30 min</span>
-              <div className="flex items-center gap-2">
-                {selectedCost && <span className="text-xs text-blue-400 font-semibold">{selectedCost.range}</span>}
-                <svg className={`w-3 h-3 text-slate-600 transition-transform ${showCost ? 'rotate-180':''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
-              </div>
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">All Model Costs</span>
+              <svg className={`w-3 h-3 text-slate-600 transition-transform ${showCost ? 'rotate-180':''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
             </button>
             {showCost && (
-              <div className="px-4 pb-3 border-t border-[#0f172a] pt-2 space-y-1.5">
-                {COST_ESTIMATES.map(c => (
-                  <div key={c.model} className={`flex justify-between text-xs py-1 px-2 rounded ${model===c.model?'bg-blue-500/10 text-blue-400':'text-slate-500'}`}>
-                    <span>{c.label} <span className="text-slate-700">{c.note}</span></span>
-                    <span className="font-semibold">{c.range}</span>
+              <div className="px-3 pb-3 border-t border-[#0f172a] pt-2 space-y-0.5">
+                {groups.map(g => (
+                  <div key={g}>
+                    <p className="text-xs text-slate-700 font-semibold uppercase tracking-wider px-1 pt-1.5 pb-0.5">{g}</p>
+                    {MODELS.filter(m => m.group === g).map(m => (
+                      <div key={m.id} className={`flex justify-between text-xs py-1 px-2 rounded ${model===m.id?'bg-blue-500/10 text-blue-400':'text-slate-600'}`}>
+                        <span>{m.label} <span className="text-slate-700">{m.note}</span></span>
+                        <span className="font-semibold">{m.range}</span>
+                      </div>
+                    ))}
                   </div>
                 ))}
-                <p className="text-xs text-slate-700 pt-1">~20 questions \xb7 800-token prompt \xb7 200-token answers</p>
+                <p className="text-xs text-slate-700 pt-1.5 px-1">~20 questions Â· 800-token prompt Â· 200-token answers</p>
               </div>
             )}
           </div>
@@ -520,7 +698,7 @@ function SetupScreen({ onStart, onHistory }) {
             </div>
           </button>
         </div>
-        <p className="text-center text-xs text-slate-700 mt-3">Answer popup not captured by Zoom/Teams/Meet \xb7 Documents saved in your browser</p>
+        <p className="text-center text-xs text-slate-700 mt-3">Answer popup not captured by Zoom/Teams/Meet Â· Keys saved locally on your device</p>
       </div>
     </div>
   );
@@ -649,7 +827,7 @@ function SessionScreen({ cfg, onEnd }) {
     postToPopup({ t: 'add', entry: { ...entry } });
     try {
       let started = false;
-      const final = await callAnthropic(cfg.apiKey, cfg.model,
+      const final = await callAI(cfg,
         [{ role: 'user', content: question }], buildSystemPrompt(cfg),
         (partial) => {
           if (!started) {
@@ -690,7 +868,7 @@ function SessionScreen({ cfg, onEnd }) {
       stream.getTracks().forEach(t => t.stop());
       const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
       showStatus('Analyzing screenshotâ€¦', 6000);
-      const result = await callAnthropicVision(cfg.apiKey, cfg.model, base64,
+      const result = await callAIVision(cfg, base64,
         'This is a screenshot from a live job interview (Zoom, Teams, Google Meet, or similar). ' +
         'Find the most recent interview question visible anywhere â€” in chat, captions, slides, text on screen. ' +
         'Return ONLY the question text, nothing else. If no clear interview question is visible, respond exactly: NO_QUESTION'
@@ -799,6 +977,7 @@ function SessionScreen({ cfg, onEnd }) {
           <span className="text-xs font-bold text-blue-400 tracking-wider hidden sm:block">ZAQNOVA</span>
           <span className="text-slate-700 hidden sm:block">|</span>
           <span className="text-slate-500 text-xs font-mono tabular-nums font-semibold">{formatTime(sessionTime)}</span>
+          <span className="text-xs text-slate-700 hidden md:block font-medium">{getModelMeta(cfg.model)?.label || cfg.model}</span>
           {isRecording && (
             <div className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 pulse-ring-amber">
               <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
