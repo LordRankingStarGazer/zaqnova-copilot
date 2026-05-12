@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -17,21 +17,27 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
     ::-webkit-scrollbar-thumb:hover { background: #334155; }
-    @keyframes pulse-ring       { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4)}  50%{box-shadow:0 0 0 8px rgba(239,68,68,0)} }
+    @keyframes pulse-ring       { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.45)} 50%{box-shadow:0 0 0 10px rgba(239,68,68,0)} }
     @keyframes pulse-ring-amber { 0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.35)} 50%{box-shadow:0 0 0 6px rgba(245,158,11,0)} }
+    @keyframes pulse-ring-blue  { 0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,.35)} 50%{box-shadow:0 0 0 6px rgba(59,130,246,0)} }
     @keyframes blink-cursor  { 0%,50%{opacity:1} 51%,100%{opacity:0} }
     @keyframes fadeUp        { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
     @keyframes spin          { to{transform:rotate(360deg)} }
-    .pulse-ring       { animation: pulse-ring       1.5s ease infinite; }
+    @keyframes live-dot      { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+    .pulse-ring       { animation: pulse-ring       1.4s ease infinite; }
     .pulse-ring-amber { animation: pulse-ring-amber 2s   ease infinite; }
-    .blink::after     { content:'▋'; animation: blink-cursor 1s infinite; color:#3b82f6; }
-    .fade-up          { animation: fadeUp 0.2s ease; }
+    .pulse-ring-blue  { animation: pulse-ring-blue  2s   ease infinite; }
+    .blink::after     { content:'â–‹'; animation: blink-cursor 1s infinite; color:#3b82f6; }
+    .fade-up          { animation: fadeUp 0.18s ease; }
     .spinner          { animation: spin 0.7s linear infinite; }
+    .live-dot         { animation: live-dot 1.2s ease infinite; }
     textarea          { resize: vertical; }
     input[type=file]  { display: none; }
     .toggle-knob      { transition: transform 0.15s ease; }
     .doc-row:hover .doc-remove { opacity: 1; }
-    .doc-remove { opacity: 0; transition: opacity 0.15s; }
+    .doc-remove       { opacity: 0; transition: opacity 0.15s; }
+    .tx-row:hover .tx-answer-btn { opacity: 1; }
+    .tx-answer-btn    { opacity: 0; transition: opacity 0.15s; }
   </style>
 </head>
 <body>
@@ -39,9 +45,9 @@
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // CONSTANTS
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const LS_API_KEY      = 'zaqnova_api_key';
 const LS_RESUME_DOCS  = 'zaqnova_resume_docs';
 const LS_CONTEXT_DOCS = 'zaqnova_context_docs';
@@ -52,9 +58,9 @@ const MAX_RESUME_DOCS = 5;
 const MAX_CTX_DOCS    = 8;
 const HISTORY_TTL_MS  = 30 * 24 * 60 * 60 * 1000;
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // POPUP HTML
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const POPUP_STYLES = `
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#080c14;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden;transition:opacity .2s}
@@ -73,7 +79,7 @@ body{background:#080c14;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 .qtxt{font-size:12px;color:#64748b;line-height:1.5;margin-bottom:12px}
 .albl{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#3b82f6;margin-bottom:5px;font-weight:700}
 .atxt{font-size:13px;color:#e2e8f0;line-height:1.75;white-space:pre-wrap;word-break:break-word}
-.atxt.streaming::after{content:'▋';animation:bl 1s infinite;color:#3b82f6}
+.atxt.streaming::after{content:'â–‹';animation:bl 1s infinite;color:#3b82f6}
 @keyframes bl{0%,50%{opacity:1}51%,100%{opacity:0}}
 .cbtn{margin-top:10px;padding:5px 11px;background:transparent;border:1px solid #1e293b;border-radius:6px;color:#475569;font-size:11px;cursor:pointer;transition:all .15s}
 .cbtn:hover{background:#0f172a;color:#e2e8f0;border-color:#334155}
@@ -94,12 +100,12 @@ window.addEventListener('message',function(e){
   else if(d.t==='hide'){document.body.style.opacity='0';document.body.style.pointerEvents='none';}
   else if(d.t==='show'){document.body.style.opacity='1';document.body.style.pointerEvents='';}
 });
-function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\'/g,'&#39;');}
 function render(){
   var r=document.getElementById('root');
-  if(!entries.length){r.innerHTML='<div class="empty"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Waiting for questions…</span><span style="font-size:11px;color:#1e293b">Auto-detect is active</span></div>';return;}
+  if(!entries.length){r.innerHTML='<div class="empty"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Waiting for questionsâ€¦</span><span style="font-size:11px;color:#1e293b">Auto-detect is active</span></div>';return;}
   r.innerHTML=entries.map(function(en){
-    if(en.loading)return'<div class="proc"><div class="spin"></div><span style="font-size:12px;color:#475569">Generating answer…</span></div>';
+    if(en.loading)return'<div class="proc"><div class="spin"></div><span style="font-size:12px;color:#475569">Generating answerâ€¦</span></div>';
     var sa=en.streaming?' streaming':'';
     return'<div class="card" id="c'+en.id+'"><div class="qlbl">Question</div><div class="qtxt">'+esc(en.q)+'</div><div class="albl">Answer</div><div class="atxt'+sa+'">'+esc(en.a||'')+'</div>'+(en.streaming?'':'<button class="cbtn" onclick="cp(this,\''+en.id+'\')">Copy answer</button>')+'</div>';
   }).join('');
@@ -120,9 +126,9 @@ const POPUP_HTML = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><
 <div class="footer">ZaqNova Interview CoPilot \xb7 Ctrl+Shift+H to hide</div>
 <script>${POPUP_SCRIPT}<\/script></body></html>`;
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // UTILITIES
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let _id = 0;
 const uid = () => `${Date.now()}-${++_id}`;
 
@@ -171,7 +177,7 @@ async function extractFileText(file) {
   const n = file.name.toLowerCase();
   if (file.type === 'application/pdf' || n.endsWith('.pdf')) return extractPdfText(file);
   if (n.endsWith('.docx') || file.type.includes('wordprocessingml')) return extractDocxText(file);
-  if (n.endsWith('.doc')) throw new Error('.doc not supported — save as .docx or .pdf');
+  if (n.endsWith('.doc')) throw new Error('.doc not supported â€” save as .docx or .pdf');
   return file.text();
 }
 
@@ -185,9 +191,9 @@ function isQuestion(text) {
   return QUESTION_STARTERS.some(s => l.startsWith(s));
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // HISTORY STORAGE
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function loadHistory() {
   try {
     const raw = localStorage.getItem(LS_HISTORY);
@@ -201,37 +207,28 @@ function saveToHistory(sessionData, cfg) {
   try {
     const history = loadHistory();
     history.push({
-      id: uid(),
-      savedAt: Date.now(),
-      jobTitle: cfg.jobTitle || 'Untitled',
-      model: cfg.model,
+      id: uid(), savedAt: Date.now(), jobTitle: cfg.jobTitle || 'Untitled', model: cfg.model,
       duration: sessionData.duration || 0,
       transcriptLines: (sessionData.transcript || []).map(t => ({ type: t.type, text: t.text })),
-      qaEntries: (sessionData.entries || [])
-        .filter(e => e.a && !e.a.startsWith('Error:'))
-        .map(e => ({ q: e.q, a: e.a })),
+      qaEntries: (sessionData.entries || []).filter(e => e.a && !e.a.startsWith('Error:')).map(e => ({ q: e.q, a: e.a })),
     });
     localStorage.setItem(LS_HISTORY, JSON.stringify(history));
   } catch (e) { console.warn('History save failed:', e); }
 }
 
 function deleteHistoryItem(id) {
-  try {
-    localStorage.setItem(LS_HISTORY, JSON.stringify(loadHistory().filter(s => s.id !== id)));
-  } catch {}
+  try { localStorage.setItem(LS_HISTORY, JSON.stringify(loadHistory().filter(s => s.id !== id))); } catch {}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // AI
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function callAnthropic(apiKey, model, messages, system, onChunk) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-allow-browser': 'true',
+      'x-api-key': apiKey, 'anthropic-version': '2023-06-01',
+      'content-type': 'application/json', 'anthropic-dangerous-allow-browser': 'true',
     },
     body: JSON.stringify({ model, max_tokens: 600, stream: true, system, messages }),
   });
@@ -257,30 +254,47 @@ async function callAnthropic(apiKey, model, messages, system, onChunk) {
   return full;
 }
 
+async function callAnthropicVision(apiKey, model, base64Image, prompt) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey, 'anthropic-version': '2023-06-01',
+      'content-type': 'application/json', 'anthropic-dangerous-allow-browser': 'true',
+    },
+    body: JSON.stringify({
+      model, max_tokens: 400,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64Image } },
+          { type: 'text', text: prompt }
+        ]
+      }]
+    }),
+  });
+  if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err?.error?.message || `API error ${res.status}`); }
+  const data = await res.json();
+  return data.content?.[0]?.text?.trim() || '';
+}
+
 function buildSystemPrompt(cfg) {
   const parts = [
-    'You are a personal interview coach helping a candidate answer questions live during a job interview. Be concise, confident, and direct. Sound completely natural — like a real person speaking.',
+    'You are a personal interview coach helping a candidate answer questions live during a job interview. Be concise, confident, and direct. Sound completely natural â€” like a real person speaking.',
     'Keep answers to 3-5 sentences. Lead with the most impressive point.',
     `Job role: ${cfg.jobTitle || 'Not specified'}.`,
   ];
   const activeResumes = (cfg.resumeDocs || []).filter(d => d.active);
-  if (activeResumes.length) {
-    parts.push('\nCandidate resume / background:\n' +
-      activeResumes.map(d => `[${d.name}]\n${d.text.slice(0,3000)}`).join('\n\n'));
-  }
+  if (activeResumes.length) parts.push('\nCandidate resume / background:\n' + activeResumes.map(d => `[${d.name}]\n${d.text.slice(0,3000)}`).join('\n\n'));
   const activeCtx = (cfg.contextDocs || []).filter(d => d.active);
-  if (activeCtx.length) {
-    parts.push('\nContext documents:\n' +
-      activeCtx.map(d => `[${d.name}]\n${d.text.slice(0,2000)}`).join('\n\n'));
-  }
+  if (activeCtx.length) parts.push('\nContext documents:\n' + activeCtx.map(d => `[${d.name}]\n${d.text.slice(0,2000)}`).join('\n\n'));
   if (cfg.context) parts.push(`\nExtra instructions: ${cfg.context}`);
   parts.push('\nNever say you are an AI. Answer in first person as the candidate. Be specific and use examples where possible.');
   return parts.join('\n');
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // DOCUMENT LIST COMPONENT
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function DocumentList({ docs, onChange, label, maxDocs, hint }) {
   const inputRef = useRef();
   const [adding, setAdding] = useState(false);
@@ -302,10 +316,10 @@ function DocumentList({ docs, onChange, label, maxDocs, hint }) {
     setAdding(false);
   }
 
-  const toggle  = (id) => onChange(docs.map(d => d.id === id ? { ...d, active: !d.active } : d));
-  const remove  = (id) => onChange(docs.filter(d => d.id !== id));
-  const canAdd  = docs.length < maxDocs;
-  const active  = docs.filter(d => d.active).length;
+  const toggle = (id) => onChange(docs.map(d => d.id === id ? { ...d, active: !d.active } : d));
+  const remove = (id) => onChange(docs.filter(d => d.id !== id));
+  const canAdd = docs.length < maxDocs;
+  const active = docs.filter(d => d.active).length;
 
   return (
     <div>
@@ -314,65 +328,46 @@ function DocumentList({ docs, onChange, label, maxDocs, hint }) {
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{label}</span>
           {active > 0 && <span className="text-xs text-blue-400/70 font-medium">{active} active</span>}
         </div>
-        <button
-          onClick={() => canAdd && !adding && inputRef.current.click()}
-          disabled={!canAdd || adding}
-          className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-semibold"
-        >
-          {adding
-            ? <div className="w-3 h-3 border border-slate-600 border-t-blue-400 rounded-full spinner" />
-            : <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
-          }
-          {adding ? 'Reading…' : 'Add'}
+        <button onClick={() => canAdd && !adding && inputRef.current.click()} disabled={!canAdd || adding}
+          className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-semibold">
+          {adding ? <div className="w-3 h-3 border border-slate-600 border-t-blue-400 rounded-full spinner" />
+            : <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>}
+          {adding ? 'Readingâ€¦' : 'Add'}
         </button>
       </div>
       <input ref={inputRef} type="file" accept=".pdf,.docx,.txt" multiple onChange={handleFiles} />
-
       <div className="space-y-1">
         {docs.length === 0 && (
-          <button
-            onClick={() => !adding && inputRef.current.click()}
-            className="w-full py-3 text-xs text-slate-600 border border-dashed border-[#1e293b] rounded-lg hover:border-slate-600 hover:text-slate-500 transition-colors text-center"
-          >
+          <button onClick={() => !adding && inputRef.current.click()}
+            className="w-full py-3 text-xs text-slate-600 border border-dashed border-[#1e293b] rounded-lg hover:border-slate-600 hover:text-slate-500 transition-colors text-center">
             {hint || 'Click Add \xb7 .pdf .docx .txt'}
           </button>
         )}
         {docs.map(doc => (
           <div key={doc.id} className={`doc-row flex items-center gap-2 px-2.5 py-2 rounded-lg border transition-all ${doc.active ? 'border-blue-500/25 bg-blue-500/5' : 'border-[#1e293b]'}`}>
-            <input
-              type="checkbox" checked={doc.active} onChange={() => toggle(doc.id)}
-              className="flex-shrink-0 w-3.5 h-3.5 cursor-pointer accent-blue-500"
-            />
-            <span className={`flex-1 text-xs truncate min-w-0 ${doc.active ? 'text-slate-300' : 'text-slate-600'}`} title={doc.name}>
-              {doc.name}
-            </span>
-            <span className="text-xs text-slate-700 flex-shrink-0 font-mono tabular-nums">
-              {doc.size > 999 ? `${(doc.size/1000).toFixed(1)}k` : doc.size}
-            </span>
-            <button
-              onClick={() => remove(doc.id)}
-              className="doc-remove text-slate-600 hover:text-red-400 transition-colors flex-shrink-0 w-4 text-center text-sm leading-none"
-            >&times;</button>
+            <input type="checkbox" checked={doc.active} onChange={() => toggle(doc.id)} className="flex-shrink-0 w-3.5 h-3.5 cursor-pointer accent-blue-500" />
+            <span className={`flex-1 text-xs truncate min-w-0 ${doc.active ? 'text-slate-300' : 'text-slate-600'}`} title={doc.name}>{doc.name}</span>
+            <span className="text-xs text-slate-700 flex-shrink-0 font-mono tabular-nums">{doc.size > 999 ? `${(doc.size/1000).toFixed(1)}k` : doc.size}</span>
+            <button onClick={() => remove(doc.id)} className="doc-remove text-slate-600 hover:text-red-400 transition-colors flex-shrink-0 w-4 text-center text-sm leading-none">&times;</button>
           </div>
         ))}
       </div>
-
       {addErr && <p className="text-xs text-red-400 mt-1.5">{addErr}</p>}
       <div className="flex items-center justify-between mt-1.5">
-        <p className="text-xs text-slate-700">.pdf \xb7 .docx \xb7 .txt — select multiple</p>
+        <p className="text-xs text-slate-700">.pdf \xb7 .docx \xb7 .txt â€” select multiple</p>
         {docs.length >= maxDocs && <p className="text-xs text-slate-600">Max {maxDocs} docs</p>}
       </div>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // SETUP SCREEN
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const COST_ESTIMATES = [
-  { model: 'claude-sonnet-4-20250514',   label: 'Sonnet 4',   range: '~$0.10–$0.25', note: 'Recommended' },
-  { model: 'claude-haiku-4-5-20251001',  label: 'Haiku 4.5',  range: '~$0.02–$0.06', note: 'Fastest & cheapest' },
-  { model: 'claude-opus-4-5',            label: 'Opus 4.5',   range: '~$0.50–$1.20', note: 'Most capable' },
+  { model: 'claude-sonnet-4-20250514',  label: 'Sonnet 4',  range: '~$0.10â€“$0.25', note: 'Recommended' },
+  { model: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', range: '~$0.02â€“$0.06', note: 'Fastest & cheapest' },
+  { model: 'claude-opus-4-5',           label: 'Opus 4.5',  range: '~$0.50â€“$1.20', note: 'Most capable' },
 ];
 
 function SetupScreen({ onStart, onHistory }) {
@@ -392,22 +387,16 @@ function SetupScreen({ onStart, onHistory }) {
     if (checked && apiKey.trim()) localStorage.setItem(LS_API_KEY, apiKey.trim());
     else localStorage.removeItem(LS_API_KEY);
   }
-
   function handleApiKeyChange(val) {
     setApiKey(val);
-    if (rememberKey) {
-      if (val.trim()) localStorage.setItem(LS_API_KEY, val.trim());
-      else localStorage.removeItem(LS_API_KEY);
-    }
+    if (rememberKey) { if (val.trim()) localStorage.setItem(LS_API_KEY, val.trim()); else localStorage.removeItem(LS_API_KEY); }
   }
-
   function handleStart() {
     if (!apiKey.trim()) { setError('Please enter your Anthropic API key.'); return; }
     if (!jobTitle.trim()) { setError('Please enter the job title.'); return; }
     setError('');
     onStart({ apiKey: apiKey.trim(), jobTitle: jobTitle.trim(), context, resumeDocs, contextDocs, model });
   }
-
   const selectedCost = COST_ESTIMATES.find(c => c.model === model);
 
   return (
@@ -429,22 +418,18 @@ function SetupScreen({ onStart, onHistory }) {
         </div>
 
         <div className="bg-[#0b1120] border border-[#0f172a] rounded-2xl p-6 space-y-5">
+          {/* API Key */}
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Anthropic API Key</label>
-            <input
-              type="password" value={apiKey} onChange={e => handleApiKeyChange(e.target.value)}
-              placeholder="sk-ant-..."
-              className={`w-full bg-[#080c14] border rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none transition-colors ${rememberKey && apiKey ? 'border-green-500/40 focus:border-green-500/60' : 'border-[#1e293b] focus:border-blue-500/50'}`}
-            />
+            <input type="password" value={apiKey} onChange={e => handleApiKeyChange(e.target.value)} placeholder="sk-ant-..."
+              className={`w-full bg-[#080c14] border rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none transition-colors ${rememberKey && apiKey ? 'border-green-500/40 focus:border-green-500/60' : 'border-[#1e293b] focus:border-blue-500/50'}`} />
             <div className="flex items-center justify-between mt-2">
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <div onClick={() => handleRememberToggle(!rememberKey)}
                   className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer flex-shrink-0 ${rememberKey ? 'bg-green-600' : 'bg-slate-700'}`}>
                   <div className={`toggle-knob absolute top-0.5 w-3 h-3 rounded-full bg-white ${rememberKey ? 'translate-x-4' : 'translate-x-0.5'}`} />
                 </div>
-                <span className="text-xs text-slate-500">
-                  {rememberKey ? <span className="text-green-400">Saved on this device</span> : 'Remember on this device'}
-                </span>
+                <span className="text-xs text-slate-500">{rememberKey ? <span className="text-green-400">Saved on this device</span> : 'Remember on this device'}</span>
               </label>
               {rememberKey && apiKey && (
                 <button onClick={() => { handleApiKeyChange(''); setRememberKey(false); localStorage.removeItem(LS_API_KEY); }}
@@ -453,69 +438,63 @@ function SetupScreen({ onStart, onHistory }) {
             </div>
           </div>
 
+          {/* Job Title */}
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Job Title / Role</label>
-            <input type="text" value={jobTitle} onChange={e => setJobTitle(e.target.value)}
-              placeholder="e.g. Senior Software Engineer at Stripe"
-              className="w-full bg-[#080c14] border border-[#1e293b] rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 transition-colors"
-            />
+            <input type="text" value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder="e.g. Senior Software Engineer at Stripe"
+              className="w-full bg-[#080c14] border border-[#1e293b] rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 transition-colors" />
           </div>
 
+          {/* Docs */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="bg-[#080c14] rounded-xl border border-[#0f172a] p-4">
               <DocumentList docs={resumeDocs} onChange={setResumeDocs} label="Resume Documents" maxDocs={MAX_RESUME_DOCS} hint="Upload resume(s) \xb7 .pdf .docx .txt" />
             </div>
             <div className="bg-[#080c14] rounded-xl border border-[#0f172a] p-4">
-              <DocumentList docs={contextDocs} onChange={setContextDocs} label="Context Documents" maxDocs={MAX_CTX_DOCS} hint="Job desc, notes, prep docs…" />
+              <DocumentList docs={contextDocs} onChange={setContextDocs} label="Context Documents" maxDocs={MAX_CTX_DOCS} hint="Job desc, notes, prep docsâ€¦" />
             </div>
           </div>
 
+          {/* Model */}
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">AI Model</label>
             <select value={model} onChange={e => setModel(e.target.value)}
               className="w-full bg-[#080c14] border border-[#1e293b] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors">
-              <option value="claude-sonnet-4-20250514">claude-sonnet-4-20250514 — Recommended</option>
-              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001 — Fastest &amp; cheapest</option>
-              <option value="claude-opus-4-5">claude-opus-4-5 — Most capable</option>
+              <option value="claude-sonnet-4-20250514">claude-sonnet-4-20250514 â€” Recommended</option>
+              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001 â€” Fastest &amp; cheapest</option>
+              <option value="claude-opus-4-5">claude-opus-4-5 â€” Most capable</option>
             </select>
           </div>
 
+          {/* Extra Instructions */}
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Extra Instructions <span className="text-slate-600 normal-case font-normal">(opt.)</span></label>
             <textarea value={context} onChange={e => setContext(e.target.value)} rows={2}
               placeholder="e.g. Emphasise distributed systems experience. Keep answers under 45 seconds."
-              className="w-full bg-[#080c14] border border-[#1e293b] rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 transition-colors"
-            />
+              className="w-full bg-[#080c14] border border-[#1e293b] rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 transition-colors" />
           </div>
 
           {error && (
             <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2.5">
-              <svg className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z"/>
-              </svg>
+              <svg className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z"/></svg>
               <span className="text-sm text-red-400">{error}</span>
             </div>
           )}
 
           <button onClick={handleStart}
             className="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-semibold rounded-xl py-3 text-sm transition-colors flex items-center justify-center gap-2">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"/>
-            </svg>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"/></svg>
             Launch Session
           </button>
         </div>
 
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="bg-[#0b1120] border border-[#0f172a] rounded-xl overflow-hidden">
-            <button onClick={() => setShowCost(v => !v)}
-              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-[#0f172a]/50 transition-colors">
+            <button onClick={() => setShowCost(v => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-[#0f172a]/50 transition-colors">
               <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Cost / 30 min</span>
               <div className="flex items-center gap-2">
                 {selectedCost && <span className="text-xs text-blue-400 font-semibold">{selectedCost.range}</span>}
-                <svg className={`w-3 h-3 text-slate-600 transition-transform ${showCost ? 'rotate-180':''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
-                </svg>
+                <svg className={`w-3 h-3 text-slate-600 transition-transform ${showCost ? 'rotate-180':''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
               </div>
             </button>
             {showCost && (
@@ -530,51 +509,42 @@ function SetupScreen({ onStart, onHistory }) {
               </div>
             )}
           </div>
-
-          <button onClick={onHistory}
-            className="bg-[#0b1120] border border-[#0f172a] rounded-xl px-4 py-2.5 flex items-center justify-between hover:border-slate-700 transition-colors group">
+          <button onClick={onHistory} className="bg-[#0b1120] border border-[#0f172a] rounded-xl px-4 py-2.5 flex items-center justify-between hover:border-slate-700 transition-colors group">
             <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
-              </svg>
+              <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
               <span className="text-xs font-semibold text-slate-600 group-hover:text-slate-400 uppercase tracking-wider transition-colors">Session History</span>
             </div>
             <div className="flex items-center gap-1.5">
-              {historyCount > 0
-                ? <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-0.5 rounded-full font-semibold">{historyCount}</span>
-                : <span className="text-xs text-slate-700">0 saved</span>
-              }
-              <svg className="w-3 h-3 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/>
-              </svg>
+              {historyCount > 0 ? <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-0.5 rounded-full font-semibold">{historyCount}</span> : <span className="text-xs text-slate-700">0 saved</span>}
+              <svg className="w-3 h-3 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/></svg>
             </div>
           </button>
         </div>
-
-        <p className="text-center text-xs text-slate-700 mt-3">
-          Answer popup not captured by Zoom/Teams/Meet \xb7 Documents saved in your browser
-        </p>
+        <p className="text-center text-xs text-slate-700 mt-3">Answer popup not captured by Zoom/Teams/Meet \xb7 Documents saved in your browser</p>
       </div>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // SESSION SCREEN
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function SessionScreen({ cfg, onEnd }) {
-  const [entries, setEntries]         = useState([]);
-  const [transcript, setTranscript]   = useState([]);
-  const [isListening, setIsListening] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [micError, setMicError]       = useState('');
-  const [sessionTime, setSessionTime] = useState(0);
-  const [manualInput, setManualInput] = useState('');
-  const [popupOpen, setPopupOpen]     = useState(false);
+  const [entries, setEntries]           = useState([]);
+  const [transcript, setTranscript]     = useState([]);
+  const [interimText, setInterimText]   = useState('');   // live speech before final
+  const [isListening, setIsListening]   = useState(false);
+  const [isRecording, setIsRecording]   = useState(false);
+  const [micError, setMicError]         = useState('');
+  const [sessionTime, setSessionTime]   = useState(0);
+  const [manualInput, setManualInput]   = useState('');
+  const [popupOpen, setPopupOpen]       = useState(false);
   const [popupBlocked, setPopupBlocked] = useState(false);
-  const [popupHidden, setPopupHidden] = useState(false);
-  const [statusMsg, setStatusMsg]     = useState('');
-  const [autoAnswer, setAutoAnswer]   = useState(true);
+  const [popupHidden, setPopupHidden]   = useState(false);
+  const [statusMsg, setStatusMsg]       = useState('');
+  const [autoAnswer, setAutoAnswer]     = useState(true);
+  const [capturing, setCapturing]       = useState(false);
+  const [endConfirm, setEndConfirm]     = useState(false);
 
   const popupRef       = useRef(null);
   const recognitionRef = useRef(null);
@@ -603,8 +573,7 @@ function SessionScreen({ cfg, onEnd }) {
 
   useEffect(() => {
     const h = (e) => { if (e.ctrlKey && e.shiftKey && (e.key === 'H' || e.key === 'h')) { e.preventDefault(); doTogglePopup(); } };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
+    window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h);
   }, [popupHidden]);
 
   useEffect(() => {
@@ -620,7 +589,7 @@ function SessionScreen({ cfg, onEnd }) {
     return () => clearInterval(ch);
   }, []);
 
-  useEffect(() => { txEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [transcript]);
+  useEffect(() => { txEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [transcript, interimText]);
 
   function openPopup() {
     try {
@@ -646,6 +615,7 @@ function SessionScreen({ cfg, onEnd }) {
 
   function showStatus(msg, ms = 2500) { setStatusMsg(msg); setTimeout(() => setStatusMsg(''), ms); }
 
+  // â”€â”€ Recording â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -659,8 +629,7 @@ function SessionScreen({ cfg, onEnd }) {
 
   function stopRecording() {
     return new Promise(resolve => {
-      const mr = recorderRef.current;
-      if (!mr) { resolve(null); return; }
+      const mr = recorderRef.current; if (!mr) { resolve(null); return; }
       const chunks = audioChunksRef.current, mime = mr.mimeType || 'audio/webm';
       mr.addEventListener('stop', () => resolve(new Blob(chunks, { type: mime })), { once: true });
       try { mr.stop(); } catch { resolve(null); }
@@ -670,6 +639,7 @@ function SessionScreen({ cfg, onEnd }) {
     });
   }
 
+  // â”€â”€ AI Answer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function processQuestion(question) {
     if (!question.trim() || question.trim() === lastQRef.current) return;
     lastQRef.current = question.trim();
@@ -680,8 +650,7 @@ function SessionScreen({ cfg, onEnd }) {
     try {
       let started = false;
       const final = await callAnthropic(cfg.apiKey, cfg.model,
-        [{ role: 'user', content: question }],
-        buildSystemPrompt(cfg),
+        [{ role: 'user', content: question }], buildSystemPrompt(cfg),
         (partial) => {
           if (!started) {
             started = true;
@@ -699,23 +668,67 @@ function SessionScreen({ cfg, onEnd }) {
       const msg = `Error: ${err.message}`;
       setEntries(prev => prev.map(e => e.id === id ? { ...e, loading: false, streaming: false, a: msg } : e));
       postToPopup({ t: 'upd', id, patch: { loading: false, streaming: false, a: msg } });
-      showStatus('API error — check key & network');
+      showStatus('API error â€” check key & network');
     }
   }
 
+  // â”€â”€ Screen Capture + Vision â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  async function captureScreen() {
+    if (capturing) return;
+    setCapturing(true);
+    showStatus('Select the window to captureâ€¦', 8000);
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'window' }, audio: false });
+      const video = document.createElement('video');
+      video.srcObject = stream; video.muted = true;
+      await new Promise(resolve => { video.onloadedmetadata = resolve; });
+      await video.play();
+      await new Promise(r => setTimeout(r, 120)); // let frame settle
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      stream.getTracks().forEach(t => t.stop());
+      const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+      showStatus('Analyzing screenshotâ€¦', 6000);
+      const result = await callAnthropicVision(cfg.apiKey, cfg.model, base64,
+        'This is a screenshot from a live job interview (Zoom, Teams, Google Meet, or similar). ' +
+        'Find the most recent interview question visible anywhere â€” in chat, captions, slides, text on screen. ' +
+        'Return ONLY the question text, nothing else. If no clear interview question is visible, respond exactly: NO_QUESTION'
+      );
+      if (result && result !== 'NO_QUESTION' && result.length > 4) {
+        const id = uid();
+        setTranscript(prev => [...prev, { id, type: 'question', text: result, source: 'capture' }]);
+        processQuestion(result);
+        showStatus('ðŸ“· Question captured â€” answering!', 2500);
+      } else {
+        showStatus('No interview question found in screenshot', 3000);
+      }
+    } catch (err) {
+      if (err.name === 'NotAllowedError' || err.name === 'AbortError') showStatus('Screen capture cancelled');
+      else showStatus('Capture failed: ' + err.message, 3500);
+    }
+    setCapturing(false);
+  }
+
+  // â”€â”€ Speech â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function startListening() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setMicError('Speech recognition not supported — use Chrome or Edge.'); return; }
+    if (!SR) { setMicError('Speech recognition not supported â€” use Chrome or Edge.'); return; }
     const rec = new SR(); rec.continuous = true; rec.interimResults = true; rec.lang = 'en-US';
     let finalBuf = '';
     rec.onstart = () => { setIsListening(true); setMicError(''); };
     rec.onerror = ev => { if (ev.error === 'not-allowed') setMicError('Microphone denied.'); else if (ev.error !== 'no-speech') setMicError(`Mic: ${ev.error}`); };
-    rec.onend   = () => { setIsListening(false); if (recognitionRef.current === rec) recognitionRef.current = null; };
+    rec.onend   = () => { setIsListening(false); setInterimText(''); if (recognitionRef.current === rec) recognitionRef.current = null; };
     rec.onresult = event => {
-      let newFinal = '';
-      for (let i = event.resultIndex; i < event.results.length; i++)
+      let newFinal = ''; let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
         if (event.results[i].isFinal) newFinal += event.results[i][0].transcript + ' ';
+        else interim += event.results[i][0].transcript;
+      }
+      // Show live interim text
+      setInterimText(interim);
       if (!newFinal) return;
+      setInterimText('');
       finalBuf += newFinal;
       const trimmed = finalBuf.trim();
       setTranscript(prev => {
@@ -729,7 +742,7 @@ function SessionScreen({ cfg, onEnd }) {
           const q = finalBuf.trim(); finalBuf = '';
           setTranscript(prev => [...prev, { id: uid(), type: 'question', text: q }]);
           processQuestion(q);
-        }, 1500);
+        }, 900); // tight debounce for seamless feel
       } else {
         debounceRef.current = setTimeout(() => { finalBuf = ''; }, 5000);
       }
@@ -741,7 +754,7 @@ function SessionScreen({ cfg, onEnd }) {
   function stopListening() {
     clearTimeout(debounceRef.current);
     if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch {} recognitionRef.current = null; }
-    setIsListening(false);
+    setIsListening(false); setInterimText('');
   }
 
   function askManual() {
@@ -751,11 +764,18 @@ function SessionScreen({ cfg, onEnd }) {
     processQuestion(q);
   }
 
+  function answerSegment(text) {
+    if (!text.trim()) return;
+    setTranscript(prev => [...prev, { id: uid(), type: 'question', text: text.trim() }]);
+    lastQRef.current = ''; // allow re-answer
+    processQuestion(text.trim());
+  }
+
   function dlTranscript() {
     const lines = transcriptRef.current; if (!lines.length) { showStatus('No transcript yet'); return; }
     const date = new Date().toISOString().slice(0,10);
     triggerDownload(
-      `ZaqNova Interview CoPilot — Live Transcript\n${cfg.jobTitle} \xb7 ${formatTime(sessionTimeRef.current)} \xb7 ${date}\n${'─'.repeat(50)}\n\n` +
+      `ZaqNova Interview CoPilot â€” Live Transcript\n${cfg.jobTitle} \xb7 ${formatTime(sessionTimeRef.current)} \xb7 ${date}\n${'â”€'.repeat(50)}\n\n` +
       lines.map(t => `[${t.type==='question'?'QUESTION':'SPEECH  '}]  ${t.text}`).join('\n\n'),
       'text/plain', `transcript-${date}.txt`
     );
@@ -769,116 +789,201 @@ function SessionScreen({ cfg, onEnd }) {
     onEnd({ entries: entriesRef.current, transcript: transcriptRef.current, duration: sessionTimeRef.current, audioBlob });
   }
 
+  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <div className="h-screen bg-[#080c14] flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-[#0b1120] border-b border-[#0f172a] flex-shrink-0 gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          <button onClick={() => isListening ? stopListening() : startListening()}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex-shrink-0 ${isListening ? 'bg-red-500/20 text-red-400 border border-red-500/40 pulse-ring' : 'bg-[#0f172a] text-slate-400 border border-[#1e293b] hover:border-slate-600'}`}>
-            <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isListening ? 'bg-red-400' : 'bg-slate-600'}`} />
-            {isListening ? 'Listening' : 'Start Mic'}
-          </button>
+
+      {/* â”€â”€ TOP NAV BAR â”€â”€ */}
+      <div className="flex items-center justify-between px-3 py-2 bg-[#0b1120] border-b border-[#0f172a] flex-shrink-0 gap-2">
+        <div className="flex items-center gap-2.5">
+          <span className="text-xs font-bold text-blue-400 tracking-wider hidden sm:block">ZAQNOVA</span>
+          <span className="text-slate-700 hidden sm:block">|</span>
+          <span className="text-slate-500 text-xs font-mono tabular-nums font-semibold">{formatTime(sessionTime)}</span>
           {isRecording && (
-            <div className="flex items-center gap-1 px-2 py-1 rounded border border-amber-500/30 bg-amber-500/10 pulse-ring-amber">
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 pulse-ring-amber">
               <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
               <span className="text-xs text-amber-400 font-semibold">REC</span>
             </div>
           )}
-          <span className="text-slate-500 text-xs font-mono tabular-nums">{formatTime(sessionTime)}</span>
         </div>
-        <div className="flex items-center gap-1.5 flex-wrap justify-end">
-          {statusMsg && <span className="text-xs text-slate-400 bg-[#0f172a] px-2 py-1 rounded border border-[#1e293b]">{statusMsg}</span>}
+        <div className="flex items-center gap-1.5">
+          {statusMsg && <span className="text-xs text-slate-400 bg-[#0f172a] px-2 py-1 rounded border border-[#1e293b] max-w-xs truncate">{statusMsg}</span>}
           <button onClick={dlTranscript} title="Download transcript"
-            className="px-2 py-1.5 rounded-lg text-xs border border-[#1e293b] text-slate-500 hover:text-slate-300 hover:border-slate-600 transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
-            </svg>
+            className="p-1.5 rounded-lg text-slate-600 border border-[#1e293b] hover:text-slate-300 hover:border-slate-600 transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
           </button>
           <button onClick={doTogglePopup}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${popupOpen && !popupHidden ? 'text-green-400 border-green-500/40 bg-green-500/10' : 'text-slate-500 border-[#1e293b] hover:border-slate-600'}`}>
-            {popupOpen && !popupHidden ? 'Answers ✓' : popupHidden ? 'Answers \xb7' : 'Answers'}
-          </button>
-          <button onClick={handleEnd}
-            className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 border border-[#1e293b] hover:border-red-500/50 hover:text-red-400 transition-colors">
-            End
+            className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors ${popupOpen && !popupHidden ? 'text-green-400 border-green-500/40 bg-green-500/10' : 'text-slate-500 border-[#1e293b] hover:border-slate-600'}`}>
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21 12 3l9.75 18H2.25Z"/></svg>
+            {popupOpen && !popupHidden ? 'Live' : 'Popup'}
           </button>
         </div>
       </div>
 
+      {/* â”€â”€ CONTROL BAR â”€â”€ */}
+      <div className="flex items-center gap-2 px-3 py-2.5 bg-[#080c14] border-b border-[#0f172a] flex-shrink-0 flex-wrap">
+        {/* Mic */}
+        <button onClick={() => isListening ? stopListening() : startListening()}
+          className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all flex-shrink-0 ${isListening ? 'bg-red-500/20 text-red-400 border border-red-500/50 pulse-ring' : 'bg-[#0b1120] text-slate-300 border border-[#1e293b] hover:border-blue-500/50 hover:text-blue-300'}`}>
+          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isListening ? 'bg-red-400 live-dot' : 'bg-slate-600'}`} />
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"/></svg>
+          {isListening ? 'Listeningâ€¦' : 'Start Mic'}
+        </button>
+
+        {/* Screen Capture */}
+        <button onClick={captureScreen} disabled={capturing}
+          title="Capture screen to detect question"
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all flex-shrink-0 ${capturing ? 'text-blue-400 border-blue-500/40 bg-blue-500/10 pulse-ring-blue' : 'text-slate-400 border-[#1e293b] bg-[#0b1120] hover:text-blue-300 hover:border-blue-500/40'}`}>
+          {capturing
+            ? <div className="w-3.5 h-3.5 border border-slate-600 border-t-blue-400 rounded-full spinner" />
+            : <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"/><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z"/></svg>
+          }
+          {capturing ? 'Analyzingâ€¦' : 'Capture Screen'}
+        </button>
+
+        {/* Auto-answer toggle */}
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#0b1120] border border-[#1e293b]">
+          <span className="text-xs text-slate-500 font-medium">Auto-answer</span>
+          <button onClick={() => setAutoAnswer(v => !v)}
+            className={`relative w-8 h-4 rounded-full transition-colors flex-shrink-0 ${autoAnswer ? 'bg-blue-600' : 'bg-slate-700'}`}>
+            <div className={`toggle-knob absolute top-0.5 w-3 h-3 rounded-full bg-white ${autoAnswer ? 'translate-x-4' : 'translate-x-0.5'}`} />
+          </button>
+          {autoAnswer && <span className="text-xs text-blue-400/70 font-medium">ON</span>}
+        </div>
+
+        <div className="flex-1" />
+
+        {/* End Session */}
+        {!endConfirm ? (
+          <button onClick={() => setEndConfirm(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-slate-400 border border-[#1e293b] bg-[#0b1120] hover:text-red-400 hover:border-red-500/50 hover:bg-red-500/5 transition-all flex-shrink-0">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5.636 5.636a9 9 0 1 0 12.728 0M12 3v9"/></svg>
+            End Session
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <span className="text-xs text-slate-500">End session?</span>
+            <button onClick={handleEnd}
+              className="px-3 py-2 rounded-xl text-xs font-bold text-white bg-red-600 hover:bg-red-500 transition-colors">
+              Yes, End
+            </button>
+            <button onClick={() => setEndConfirm(false)}
+              className="px-3 py-2 rounded-xl text-xs font-medium text-slate-500 border border-[#1e293b] hover:text-slate-300 transition-colors">
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* â”€â”€ ALERTS â”€â”€ */}
       {popupBlocked && (
         <div className="mx-3 mt-2 flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 flex-shrink-0">
           <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z"/></svg>
-          <p className="text-xs text-amber-400">Popup blocked — allow popups for this page, then click <button onClick={openPopup} className="underline">Try again</button>. Answers also show below.</p>
+          <p className="text-xs text-amber-400">Popup blocked â€” allow popups then <button onClick={openPopup} className="underline">try again</button>. Answers show in the panel below.</p>
         </div>
       )}
       {micError && <div className="mx-3 mt-2 bg-red-500/10 border border-red-500/30 rounded-xl p-2 text-xs text-red-400 flex-shrink-0">{micError}</div>}
 
+      {/* â”€â”€ MAIN PANELS â”€â”€ */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
+
+        {/* LEFT: LIVE TRANSCRIPT */}
         <div className="flex-1 flex flex-col overflow-hidden md:border-r border-[#0f172a] min-h-0">
-          <div className="px-3 py-2 border-b border-[#0f172a] flex items-center justify-between flex-shrink-0">
-            <span className="text-xs text-slate-600 font-semibold uppercase tracking-wider">Transcript</span>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-600">Auto-answer</span>
-              <button onClick={() => setAutoAnswer(v => !v)}
-                className={`relative w-8 h-4 rounded-full transition-colors flex-shrink-0 ${autoAnswer ? 'bg-blue-600' : 'bg-slate-700'}`}>
-                <div className={`toggle-knob absolute top-0.5 w-3 h-3 rounded-full bg-white ${autoAnswer ? 'translate-x-4' : 'translate-x-0.5'}`} />
-              </button>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-1.5 min-h-0">
-            {transcript.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-36 text-slate-700 gap-2">
-                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"/></svg>
-                <span className="text-xs">Press "Start Mic" to begin</span>
+          {/* Panel header */}
+          <div className="px-3 py-2 border-b border-[#0f172a] flex items-center gap-2 flex-shrink-0">
+            <span className="text-xs text-slate-600 font-semibold uppercase tracking-wider">Live Transcript</span>
+            {isListening && (
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-red-400 live-dot" />
+                <span className="text-xs text-red-400/70 font-medium">LIVE</span>
               </div>
             )}
+            {transcript.length > 0 && <span className="ml-auto text-xs text-slate-700">{transcript.length} line{transcript.length !== 1 ? 's' : ''}</span>}
+          </div>
+
+          {/* Transcript scroll area */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-1 min-h-0">
+            {transcript.length === 0 && !interimText && (
+              <div className="flex flex-col items-center justify-center h-40 text-slate-700 gap-2">
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"/></svg>
+                <span className="text-xs">Press <span className="text-slate-600 font-semibold">Start Mic</span> to capture speech live</span>
+                <span className="text-xs text-slate-700">or use <span className="text-slate-600 font-semibold">Capture Screen</span> to detect questions visually</span>
+              </div>
+            )}
+
             {transcript.map(t => (
-              <div key={t.id} className="fade-up flex items-start gap-2">
-                <div className={`flex-shrink-0 w-1.5 h-1.5 rounded-full mt-1.5 ${t.type==='question'?'bg-blue-400':'bg-slate-700'}`} />
-                <p className={`text-xs leading-relaxed ${t.type==='question'?'text-slate-200 font-medium':'text-slate-500'}`}>
-                  {t.text}
-                  {t.type==='question' && <span className="ml-1.5 text-xs text-blue-400 bg-blue-400/10 px-1 py-0.5 rounded font-semibold">Q→AI</span>}
-                </p>
+              <div key={t.id} className={`tx-row fade-up flex items-start gap-2 py-1 px-1.5 rounded-lg group transition-colors hover:bg-[#0b1120]`}>
+                <div className={`flex-shrink-0 w-2 h-2 rounded-full mt-1.5 ${t.type === 'question' ? 'bg-blue-500' : t.source === 'capture' ? 'bg-purple-500' : 'bg-slate-700'}`} />
+                <div className="flex-1 min-w-0">
+                  <p className={`text-xs leading-relaxed break-words ${t.type === 'question' ? 'text-slate-100 font-medium' : 'text-slate-500'}`}>
+                    {t.text}
+                    {t.type === 'question' && (
+                      <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded font-semibold ${t.source === 'capture' ? 'text-purple-400 bg-purple-400/10' : 'text-blue-400 bg-blue-400/10'}`}>
+                        {t.source === 'capture' ? 'ðŸ“· captured' : 'Qâ†’AI'}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                {/* Per-segment Answer button (hover reveal) */}
+                <button
+                  onClick={() => { lastQRef.current = ''; answerSegment(t.text); }}
+                  title="Answer this"
+                  className="tx-answer-btn flex-shrink-0 flex items-center gap-1 px-2 py-0.5 text-xs text-blue-400 bg-blue-500/10 border border-blue-500/30 rounded-md hover:bg-blue-500/20 transition-colors font-semibold">
+                  <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"/></svg>
+                  Answer
+                </button>
               </div>
             ))}
+
+            {/* Live interim speech */}
+            {interimText && (
+              <div className="flex items-start gap-2 py-1 px-1.5">
+                <div className="flex-shrink-0 w-2 h-2 rounded-full mt-1.5 bg-slate-600 live-dot" />
+                <p className="text-xs text-slate-600 italic leading-relaxed">{interimText}<span className="inline-block w-0.5 h-3 bg-slate-600 ml-0.5 align-middle live-dot" /></p>
+              </div>
+            )}
+
             <div ref={txEndRef} />
           </div>
+
+          {/* Manual input row */}
           <div className="p-2.5 border-t border-[#0f172a] flex gap-2 flex-shrink-0">
             <input type="text" value={manualInput} onChange={e => setManualInput(e.target.value)}
-              onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); askManual(); } }}
-              placeholder="Type a question for an AI answer…"
-              className="flex-1 bg-[#0b1120] border border-[#1e293b] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 transition-colors"
-            />
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askManual(); } }}
+              placeholder="Type a question and press Answerâ€¦"
+              className="flex-1 bg-[#0b1120] border border-[#1e293b] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 transition-colors" />
             <button onClick={askManual} disabled={!manualInput.trim()}
-              className="px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white rounded-lg text-xs font-semibold transition-colors">
-              Ask
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white rounded-lg text-xs font-bold transition-colors">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"/></svg>
+              Answer
             </button>
           </div>
         </div>
 
+        {/* RIGHT: AI ANSWERS (inline / fallback) */}
         <div className="flex-1 flex flex-col overflow-hidden md:max-w-sm lg:max-w-md min-h-0">
           <div className="px-3 py-2 border-b border-[#0f172a] flex items-center justify-between flex-shrink-0">
-            <span className="text-xs text-slate-600 font-semibold uppercase tracking-wider">Answers</span>
+            <span className="text-xs text-slate-600 font-semibold uppercase tracking-wider">AI Answers</span>
             {popupOpen && !popupHidden
-              ? <span className="text-xs text-green-400/50">→ Popup active</span>
+              ? <span className="text-xs text-green-400/60">â†’ Also in popup</span>
               : <span className="text-xs text-slate-700">Popup closed</span>}
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
             {entries.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-36 text-slate-700 gap-2">
-                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/></svg>
-                <span className="text-xs">AI answers appear here</span>
+              <div className="flex flex-col items-center justify-center h-40 text-slate-700 gap-2">
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/></svg>
+                <span className="text-xs">AI answers will appear here</span>
               </div>
             )}
             {entries.map(entry => (
               <div key={entry.id} className="fade-up bg-[#0b1120] border border-[#0f172a] rounded-xl p-3">
-                <p className="text-xs text-slate-600 font-semibold uppercase tracking-wider mb-1">Q</p>
-                <p className="text-xs text-slate-500 mb-2 leading-relaxed">{entry.q}</p>
+                <p className="text-xs text-slate-600 font-semibold uppercase tracking-wider mb-1">Question</p>
+                <p className="text-xs text-slate-500 mb-2.5 leading-relaxed">{entry.q}</p>
                 <p className="text-xs text-blue-400 font-semibold uppercase tracking-wider mb-1">Answer</p>
                 {entry.loading
-                  ? <div className="flex items-center gap-2 text-slate-600 text-xs py-1"><div className="w-3 h-3 border border-slate-700 border-t-blue-500 rounded-full spinner" />Generating…</div>
+                  ? <div className="flex items-center gap-2 text-slate-600 text-xs py-1"><div className="w-3 h-3 border border-slate-700 border-t-blue-500 rounded-full spinner" />Generatingâ€¦</div>
                   : <>
-                      <p className={`text-xs text-slate-200 leading-relaxed whitespace-pre-wrap ${entry.streaming?'blink':''}`}>{entry.a}</p>
+                      <p className={`text-xs text-slate-200 leading-relaxed whitespace-pre-wrap ${entry.streaming ? 'blink' : ''}`}>{entry.a}</p>
                       {!entry.streaming && entry.a && !entry.a.startsWith('Error:') && (
                         <button onClick={() => { navigator.clipboard.writeText(entry.a); showStatus('Copied!'); }}
                           className="mt-2 text-xs text-slate-600 border border-[#1e293b] px-2 py-0.5 rounded hover:text-white hover:border-slate-500 transition-colors">Copy</button>
@@ -894,9 +999,9 @@ function SessionScreen({ cfg, onEnd }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // NOTES SCREEN
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function NotesScreen({ cfg, sessionData, onRestart, onHistory }) {
   const [notes, setNotes]    = useState('');
   const [generating, setGen] = useState(false);
@@ -912,30 +1017,27 @@ function NotesScreen({ cfg, sessionData, onRestart, onHistory }) {
     try {
       const qaPairs = sessionData.entries.filter(e => e.a && !e.a.startsWith('Error:')).map((e,i) => `Q${i+1}: ${e.q}\nA${i+1}: ${e.a}`).join('\n\n');
       const text = await callAnthropic(cfg.apiKey, cfg.model,
-        [{ role:'user', content:`Interview for "${cfg.jobTitle}" (${formatTime(sessionData.duration||0)}):\n\n${qaPairs}\n\nGenerate a structured post-session debrief:\n1. Session Overview\n2. Key Questions & Best Answers (top 3–5)\n3. Topics Covered\n4. Action Items\n5. Strengths Demonstrated\n6. Areas to Improve\n\nBe specific and actionable.` }],
-        'You are an expert interview coach writing a post-session debrief. Be honest, specific, actionable.',
-        null
-      );
+        [{ role:'user', content:`Interview for "${cfg.jobTitle}" (${formatTime(sessionData.duration||0)}):\n\n${qaPairs}\n\nGenerate a structured post-session debrief:\n1. Session Overview\n2. Key Questions & Best Answers (top 3â€“5)\n3. Topics Covered\n4. Action Items\n5. Strengths Demonstrated\n6. Areas to Improve\n\nBe specific and actionable.` }],
+        'You are an expert interview coach writing a post-session debrief. Be honest, specific, actionable.', null);
       setNotes(text);
     } catch (err) {
       setError(`Notes generation failed: ${err.message}`);
-      setNotes(sessionData.entries.filter(e => e.a).map((e,i) => `Q${i+1}: ${e.q}\n\nA: ${e.a}`).join('\n\n─────\n\n') || 'No answers recorded.');
+      setNotes(sessionData.entries.filter(e => e.a).map((e,i) => `Q${i+1}: ${e.q}\n\nA: ${e.a}`).join('\n\nâ€•â€•â€•â€•â€•\n\n') || 'No answers recorded.');
     }
     setGen(false);
   }
 
   function dlNotes() {
-    const t = `ZaqNova Interview CoPilot — Session Notes\n${cfg.jobTitle} \xb7 ${formatTime(sessionData?.duration||0)} \xb7 ${date}\n${'═'.repeat(55)}\n\n${notes}`;
+    const t = `ZaqNova Interview CoPilot â€” Session Notes\n${cfg.jobTitle} \xb7 ${formatTime(sessionData?.duration||0)} \xb7 ${date}\n${'â•'.repeat(55)}\n\n${notes}`;
     triggerDownload(t, 'text/plain', `notes-${date}.txt`);
   }
-
   function dlTranscript() {
     const lines = sessionData?.transcript || []; if (!lines.length) return;
-    const t = `ZaqNova Interview CoPilot — Transcript\n${cfg.jobTitle} \xb7 ${formatTime(sessionData?.duration||0)} \xb7 ${date}\n${'─'.repeat(50)}\n\n` +
-      lines.map(l => `[${l.type==='question'?'QUESTION':'SPEECH  '}]  ${l.text}`).join('\n\n');
-    triggerDownload(t, 'text/plain', `transcript-${date}.txt`);
+    triggerDownload(
+      `ZaqNova Interview CoPilot â€” Transcript\n${cfg.jobTitle} \xb7 ${formatTime(sessionData?.duration||0)} \xb7 ${date}\n${'â”€'.repeat(50)}\n\n` +
+      lines.map(l => `[${l.type==='question'?'QUESTION':'SPEECH  '}]  ${l.text}`).join('\n\n'),
+      'text/plain', `transcript-${date}.txt`);
   }
-
   function dlRecording() {
     const blob = sessionData?.audioBlob; if (!blob) return;
     const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'mp4' : 'webm';
@@ -952,32 +1054,24 @@ function NotesScreen({ cfg, sessionData, onRestart, onHistory }) {
             <span className="text-xs font-bold text-blue-400 tracking-wider">ZAQNOVA</span>
             <span className="text-xs text-slate-600">Session Notes</span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">{cfg.jobTitle} \xb7 {formatTime(sessionData?.duration||0)} \xb7 Saved to history ✓</p>
+          <p className="text-xs text-slate-500 mt-0.5">{cfg.jobTitle} \xb7 {formatTime(sessionData?.duration||0)} \xb7 Saved to history âœ“</p>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           <button onClick={() => { navigator.clipboard.writeText(notes).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }} disabled={!notes||generating}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors disabled:opacity-30">
-            {copied ? '✓ Copied' : 'Copy Notes'}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors disabled:opacity-30">
+            {copied ? 'âœ“ Copied' : 'Copy Notes'}
           </button>
-          <button onClick={dlNotes} disabled={!notes||generating}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors disabled:opacity-30">
-            Notes .txt
-          </button>
-          {(sessionData?.transcript?.length > 0) && (
-            <button onClick={dlTranscript} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors">Transcript .txt</button>
-          )}
-          {sessionData?.audioBlob && (
-            <button onClick={dlRecording} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-colors">Recording .webm</button>
-          )}
+          <button onClick={dlNotes} disabled={!notes||generating} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors disabled:opacity-30">Notes .txt</button>
+          {(sessionData?.transcript?.length > 0) && <button onClick={dlTranscript} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors">Transcript .txt</button>}
+          {sessionData?.audioBlob && <button onClick={dlRecording} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-colors">Recording .webm</button>}
           <button onClick={onHistory} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors">History</button>
           <button onClick={onRestart} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors">New Session</button>
         </div>
       </div>
-
       <div className="flex-1 max-w-3xl mx-auto w-full p-4 md:p-6">
         {error && <div className="mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-400">{error}</div>}
         {generating
-          ? <div className="flex flex-col items-center justify-center py-24 gap-4 text-slate-500"><div className="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full spinner" /><span className="text-sm">Generating debrief…</span></div>
+          ? <div className="flex flex-col items-center justify-center py-24 gap-4 text-slate-500"><div className="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full spinner" /><span className="text-sm">Generating debriefâ€¦</span></div>
           : <div className="bg-[#0b1120] border border-[#0f172a] rounded-2xl p-5 md:p-6"><pre className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">{notes}</pre></div>
         }
         {!generating && sessionData?.entries?.filter(e => e.a && !e.a.startsWith('Error:')).length > 0 && (
@@ -1000,59 +1094,44 @@ function NotesScreen({ cfg, sessionData, onRestart, onHistory }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // HISTORY SCREEN
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function HistoryScreen({ onBack }) {
-  const [sessions, setSessions]           = useState([]);
-  const [expanded, setExpanded]           = useState(null);
+  const [sessions, setSessions]                 = useState([]);
+  const [expanded, setExpanded]                 = useState(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   useEffect(() => { setSessions(loadHistory().sort((a,b) => b.savedAt - a.savedAt)); }, []);
 
   function handleDelete(id) { deleteHistoryItem(id); setSessions(prev => prev.filter(s => s.id !== id)); }
-
-  function handleClearAll() {
-    try { localStorage.removeItem(LS_HISTORY); } catch {}
-    setSessions([]); setShowClearConfirm(false);
-  }
+  function handleClearAll() { try { localStorage.removeItem(LS_HISTORY); } catch {} setSessions([]); setShowClearConfirm(false); }
 
   function dlTranscript(s) {
     const date = new Date(s.savedAt).toISOString().slice(0,10);
     triggerDownload(
-      `ZaqNova Interview CoPilot — Transcript\n${s.jobTitle} \xb7 ${formatTime(s.duration)} \xb7 ${date}\n${'─'.repeat(50)}\n\n` +
+      `ZaqNova Interview CoPilot â€” Transcript\n${s.jobTitle} \xb7 ${formatTime(s.duration)} \xb7 ${date}\n${'â”€'.repeat(50)}\n\n` +
       (s.transcriptLines||[]).map(t => `[${t.type==='question'?'QUESTION':'SPEECH  '}]  ${t.text}`).join('\n\n'),
-      'text/plain', `transcript-${date}.txt`
-    );
+      'text/plain', `transcript-${date}.txt`);
   }
-
   function dlQA(s) {
     const date = new Date(s.savedAt).toISOString().slice(0,10);
     triggerDownload(
-      `ZaqNova Interview CoPilot — Q&A Log\n${s.jobTitle} \xb7 ${formatTime(s.duration)} \xb7 ${date}\n${'═'.repeat(55)}\n\n` +
-      (s.qaEntries||[]).map((e,i) => `Q${i+1}: ${e.q}\n\nA${i+1}: ${e.a}`).join('\n\n' + '─'.repeat(40) + '\n\n'),
-      'text/plain', `qa-log-${date}.txt`
-    );
+      `ZaqNova Interview CoPilot â€” Q&A Log\n${s.jobTitle} \xb7 ${formatTime(s.duration)} \xb7 ${date}\n${'â•'.repeat(55)}\n\n` +
+      (s.qaEntries||[]).map((e,i) => `Q${i+1}: ${e.q}\n\nA${i+1}: ${e.a}`).join('\n\n' + 'â”€'.repeat(40) + '\n\n'),
+      'text/plain', `qa-log-${date}.txt`);
   }
-
-  function daysLeft(savedAt) {
-    const ms = HISTORY_TTL_MS - (Date.now() - savedAt);
-    return Math.max(0, Math.ceil(ms / (24*60*60*1000)));
-  }
+  function daysLeft(savedAt) { return Math.max(0, Math.ceil((HISTORY_TTL_MS - (Date.now() - savedAt)) / (24*60*60*1000))); }
 
   return (
     <div className="min-h-screen bg-[#080c14] flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 bg-[#0b1120] border-b border-[#0f172a] sticky top-0 z-10">
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="flex items-center gap-1 text-xs text-slate-500 hover:text-white transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/></svg>
-            Back
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/></svg>Back
           </button>
           <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-blue-400 tracking-wider">ZAQNOVA</span>
-              <span className="text-xs text-slate-600">Session History</span>
-            </div>
+            <div className="flex items-center gap-1.5"><span className="text-xs font-bold text-blue-400 tracking-wider">ZAQNOVA</span><span className="text-xs text-slate-600">Session History</span></div>
             <p className="text-xs text-slate-600 mt-0.5">Auto-deleted after 30 days</p>
           </div>
         </div>
@@ -1070,16 +1149,13 @@ function HistoryScreen({ onBack }) {
           </div>
         )}
       </div>
-
       <div className="flex-1 max-w-3xl mx-auto w-full p-4 md:p-6">
         {sessions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-slate-700">
-            <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
-            </svg>
+            <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
             <span className="text-sm">No saved sessions yet</span>
-            <span className="text-xs text-slate-700 text-center max-w-xs">Sessions are automatically saved when you end a session. They're kept for 30 days.</span>
-            <button onClick={onBack} className="mt-2 text-xs text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-lg hover:bg-blue-500/10 transition-colors">← Back to Setup</button>
+            <span className="text-xs text-slate-700 text-center max-w-xs">Sessions save automatically when you end. Kept for 30 days.</span>
+            <button onClick={onBack} className="mt-2 text-xs text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-lg hover:bg-blue-500/10 transition-colors">â† Back to Setup</button>
           </div>
         ) : (
           <div className="space-y-3">
@@ -1097,37 +1173,31 @@ function HistoryScreen({ onBack }) {
                         <span className="text-xs text-slate-500">{formatTime(s.duration)}</span>
                         <span className="text-xs text-slate-600">\xb7</span>
                         <span className="text-xs text-slate-500">{s.qaEntries?.length||0} Q&amp;As</span>
-                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${dl <= 3 ? 'text-red-400 bg-red-500/10' : dl <= 7 ? 'text-amber-400 bg-amber-500/10' : 'text-slate-600 bg-[#0f172a]'}`}>
-                          {dl}d left
-                        </span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${dl<=3?'text-red-400 bg-red-500/10':dl<=7?'text-amber-400 bg-amber-500/10':'text-slate-600 bg-[#0f172a]'}`}>{dl}d left</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
-                      {(s.transcriptLines?.length > 0) && (
-                        <button onClick={() => dlTranscript(s)} className="text-xs text-slate-500 border border-[#1e293b] px-2 py-1 rounded-lg hover:text-white hover:border-slate-600 transition-colors">Transcript</button>
-                      )}
-                      {(s.qaEntries?.length > 0) && (
-                        <button onClick={() => dlQA(s)} className="text-xs text-slate-500 border border-[#1e293b] px-2 py-1 rounded-lg hover:text-white hover:border-slate-600 transition-colors">Q&amp;A</button>
-                      )}
-                      <button onClick={() => setExpanded(expanded === s.id ? null : s.id)}
+                      {(s.transcriptLines?.length > 0) && <button onClick={() => dlTranscript(s)} className="text-xs text-slate-500 border border-[#1e293b] px-2 py-1 rounded-lg hover:text-white hover:border-slate-600 transition-colors">Transcript</button>}
+                      {(s.qaEntries?.length > 0) && <button onClick={() => dlQA(s)} className="text-xs text-slate-500 border border-[#1e293b] px-2 py-1 rounded-lg hover:text-white hover:border-slate-600 transition-colors">Q&amp;A</button>}
+                      <button onClick={() => setExpanded(expanded===s.id?null:s.id)}
                         className={`text-xs px-2 py-1 rounded-lg border transition-colors ${expanded===s.id?'text-blue-400 border-blue-500/40 bg-blue-500/10':'text-slate-500 border-[#1e293b] hover:text-white hover:border-slate-600'}`}>
-                        {expanded === s.id ? 'Hide' : 'View'}
+                        {expanded===s.id?'Hide':'View'}
                       </button>
                       <button onClick={() => handleDelete(s.id)} className="text-xs text-slate-600 border border-[#1e293b] px-2 py-1 rounded-lg hover:text-red-400 hover:border-red-500/40 transition-colors">Delete</button>
                     </div>
                   </div>
-                  {expanded === s.id && (
+                  {expanded===s.id && (
                     <div className="border-t border-[#0f172a] p-4 space-y-3 bg-[#080c14]/50">
-                      {(!s.qaEntries || s.qaEntries.length === 0) ? (
-                        <p className="text-xs text-slate-600 text-center py-4">No Q&amp;A entries in this session.</p>
-                      ) : s.qaEntries.map((e, i) => (
-                        <div key={i} className="border border-[#0f172a] rounded-lg p-3">
-                          <p className="text-xs text-slate-600 font-semibold mb-1">Q{i+1}</p>
-                          <p className="text-xs text-slate-400 mb-2 leading-relaxed">{e.q}</p>
-                          <p className="text-xs text-blue-400/70 font-semibold mb-1">Answer</p>
-                          <p className="text-xs text-slate-300 leading-relaxed">{e.a}</p>
-                        </div>
-                      ))}
+                      {(!s.qaEntries||s.qaEntries.length===0) ? <p className="text-xs text-slate-600 text-center py-4">No Q&amp;A entries.</p>
+                        : s.qaEntries.map((e,i) => (
+                          <div key={i} className="border border-[#0f172a] rounded-lg p-3">
+                            <p className="text-xs text-slate-600 font-semibold mb-1">Q{i+1}</p>
+                            <p className="text-xs text-slate-400 mb-2 leading-relaxed">{e.q}</p>
+                            <p className="text-xs text-blue-400/70 font-semibold mb-1">Answer</p>
+                            <p className="text-xs text-slate-300 leading-relaxed">{e.a}</p>
+                          </div>
+                        ))
+                      }
                     </div>
                   )}
                 </div>
@@ -1140,9 +1210,9 @@ function HistoryScreen({ onBack }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // APP ROOT
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function App() {
   const [screen, setScreen]    = useState('setup');
   const [cfg, setCfg]          = useState(null);
@@ -1150,14 +1220,13 @@ function App() {
 
   function handleEnd(data) {
     if (cfg) saveToHistory(data, cfg);
-    setData(data);
-    setScreen('notes');
+    setData(data); setScreen('notes');
   }
 
-  if (screen === 'setup')   return <SetupScreen onStart={c => { setCfg(c); setScreen('session'); }} onHistory={() => setScreen('history')} />;
-  if (screen === 'session') return <SessionScreen cfg={cfg} onEnd={handleEnd} />;
-  if (screen === 'notes')   return <NotesScreen cfg={cfg} sessionData={sessionData} onRestart={() => { setData(null); setScreen('setup'); }} onHistory={() => setScreen('history')} />;
-  if (screen === 'history') return <HistoryScreen onBack={() => setScreen(sessionData ? 'notes' : 'setup')} />;
+  if (screen==='setup')   return <SetupScreen onStart={c=>{setCfg(c);setScreen('session');}} onHistory={()=>setScreen('history')} />;
+  if (screen==='session') return <SessionScreen cfg={cfg} onEnd={handleEnd} />;
+  if (screen==='notes')   return <NotesScreen cfg={cfg} sessionData={sessionData} onRestart={()=>{setData(null);setScreen('setup');}} onHistory={()=>setScreen('history')} />;
+  if (screen==='history') return <HistoryScreen onBack={()=>setScreen(sessionData?'notes':'setup')} />;
   return null;
 }
 
@@ -1165,3 +1234,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(
 </script>
 </body>
 </html>
+
