@@ -121,6 +121,8 @@ body{background:#080c14;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 const POPUP_SCRIPT = `
 var entries=[];
 window.addEventListener('message',function(e){
+  // Only accept messages from our direct opener â€” reject foreign origins
+  if(e.source!==window.opener) return;
   var d=e.data; if(!d||!d.t) return;
   if(d.t==='add'){entries.push(d.entry);render();}
   else if(d.t==='upd'){var i=entries.findIndex(function(x){return x.id===d.id});if(i>=0){entries[i]=Object.assign({},entries[i],d.patch);render();}}
@@ -251,9 +253,9 @@ function deleteHistoryItem(id) {
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // AI
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-async function callAnthropic(apiKey, model, messages, system, onChunk) {
+async function callAnthropic(apiKey, model, messages, system, onChunk, signal) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
+    method: 'POST', signal,
     headers: {
       'x-api-key': apiKey, 'anthropic-version': '2023-06-01',
       'content-type': 'application/json', 'anthropic-dangerous-allow-browser': 'true',
@@ -282,9 +284,9 @@ async function callAnthropic(apiKey, model, messages, system, onChunk) {
   return full;
 }
 
-async function callOpenAI(apiKey, model, messages, system, onChunk) {
+async function callOpenAI(apiKey, model, messages, system, onChunk, signal) {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
+    method: 'POST', signal,
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model, max_tokens: 600, stream: true,
@@ -310,13 +312,13 @@ async function callOpenAI(apiKey, model, messages, system, onChunk) {
   return full;
 }
 
-async function callGemini(apiKey, model, messages, system, onChunk) {
+async function callGemini(apiKey, model, messages, system, onChunk, signal) {
   const contents = messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
   const body = { contents, generationConfig: { maxOutputTokens: 600 } };
   if (system) body.systemInstruction = { parts: [{ text: system }] };
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}&alt=sse`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
   );
   if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err?.error?.message || `Gemini error ${res.status}`); }
   const reader = res.body.getReader(); const dec = new TextDecoder();
@@ -334,12 +336,12 @@ async function callGemini(apiKey, model, messages, system, onChunk) {
   return full;
 }
 
-function callAI(cfg, messages, system, onChunk) {
+function callAI(cfg, messages, system, onChunk, signal) {
   const key = getActiveKey(cfg);
   const p = getProvider(cfg.model);
-  if (p === 'openai') return callOpenAI(key, cfg.model, messages, system, onChunk);
-  if (p === 'gemini') return callGemini(key, cfg.model, messages, system, onChunk);
-  return callAnthropic(key, cfg.model, messages, system, onChunk);
+  if (p === 'openai') return callOpenAI(key, cfg.model, messages, system, onChunk, signal);
+  if (p === 'gemini') return callGemini(key, cfg.model, messages, system, onChunk, signal);
+  return callAnthropic(key, cfg.model, messages, system, onChunk, signal);
 }
 
 async function callAnthropicVision(apiKey, model, base64Image, prompt) {
@@ -725,7 +727,9 @@ function SessionScreen({ cfg, onEnd }) {
   const [endConfirm, setEndConfirm]     = useState(false);
 
   const popupRef       = useRef(null);
-  const recognitionRef = useRef(null);
+  const abortCtrlRef   = useRef(null);   // AbortController for in-flight AI fetches
+  const recognitionRef  = useRef(null);
+  const wantListenRef   = useRef(false);  // tracks intent so we can auto-restart on crash
   const recorderRef    = useRef(null);
   const audioStreamRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -756,7 +760,9 @@ function SessionScreen({ cfg, onEnd }) {
 
   useEffect(() => {
     if (window.electronAPI?.onAnswerVisibilityChanged) {
-      window.electronAPI.onAnswerVisibilityChanged(isHidden => setPopupHidden(isHidden));
+      // Returns an unsubscribe fn â€” clean up to prevent IPC listener accumulation
+      const unsub = window.electronAPI.onAnswerVisibilityChanged(isHidden => setPopupHidden(isHidden));
+      return () => { if (typeof unsub === 'function') unsub(); };
     }
   }, []);
 
@@ -782,7 +788,8 @@ function SessionScreen({ cfg, onEnd }) {
   }
 
   function postToPopup(msg) {
-    if (popupRef.current && !popupRef.current.closed) try { popupRef.current.postMessage(msg, '*'); } catch {}
+    if (popupRef.current && !popupRef.current.closed)
+      try { popupRef.current.postMessage(msg, window.location.origin || '*'); } catch {}
   }
 
   function doTogglePopup() {
@@ -802,7 +809,10 @@ function SessionScreen({ cfg, onEnd }) {
       const mr = new MediaRecorder(stream, { mimeType: mime });
       mr.ondataavailable = e => { if (e.data?.size > 0) audioChunksRef.current.push(e.data); };
       mr.start(1000); recorderRef.current = mr; setIsRecording(true);
-    } catch {}
+    } catch (err) {
+      // Surface mic-access errors rather than silently skipping recording
+      setMicError(`Recording unavailable: ${err.message}`);
+    }
   }
 
   function stopRecording() {
@@ -825,6 +835,9 @@ function SessionScreen({ cfg, onEnd }) {
     const entry = { id, q: question.trim(), a: '', loading: true, streaming: false };
     setEntries(prev => [...prev, entry]);
     postToPopup({ t: 'add', entry: { ...entry } });
+    // Create a fresh AbortController for this request
+    const ctrl = new AbortController();
+    abortCtrlRef.current = ctrl;
     try {
       let started = false;
       const final = await callAI(cfg,
@@ -838,11 +851,13 @@ function SessionScreen({ cfg, onEnd }) {
             setEntries(prev => prev.map(e => e.id === id ? { ...e, a: partial } : e));
             postToPopup({ t: 'upd', id, patch: { a: partial } });
           }
-        }
+        },
+        ctrl.signal
       );
       setEntries(prev => prev.map(e => e.id === id ? { ...e, loading: false, streaming: false, a: final } : e));
       postToPopup({ t: 'upd', id, patch: { loading: false, streaming: false, a: final } });
     } catch (err) {
+      if (err.name === 'AbortError') return; // session ended â€” discard silently
       const msg = `Error: ${err.message}`;
       setEntries(prev => prev.map(e => e.id === id ? { ...e, loading: false, streaming: false, a: msg } : e));
       postToPopup({ t: 'upd', id, patch: { loading: false, streaming: false, a: msg } });
@@ -855,8 +870,9 @@ function SessionScreen({ cfg, onEnd }) {
     if (capturing) return;
     setCapturing(true);
     showStatus('Select the window to captureâ€¦', 8000);
+    let stream = null;
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'window' }, audio: false });
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'window' }, audio: false });
       const video = document.createElement('video');
       video.srcObject = stream; video.muted = true;
       await new Promise(resolve => { video.onloadedmetadata = resolve; });
@@ -865,7 +881,6 @@ function SessionScreen({ cfg, onEnd }) {
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth; canvas.height = video.videoHeight;
       canvas.getContext('2d').drawImage(video, 0, 0);
-      stream.getTracks().forEach(t => t.stop());
       const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
       showStatus('Analyzing screenshotâ€¦', 6000);
       const result = await callAIVision(cfg, base64,
@@ -884,6 +899,9 @@ function SessionScreen({ cfg, onEnd }) {
     } catch (err) {
       if (err.name === 'NotAllowedError' || err.name === 'AbortError') showStatus('Screen capture cancelled');
       else showStatus('Capture failed: ' + err.message, 3500);
+    } finally {
+      // Always release the capture stream â€” even if canvas/vision step throws
+      stream?.getTracks().forEach(t => t.stop());
     }
     setCapturing(false);
   }
@@ -896,7 +914,14 @@ function SessionScreen({ cfg, onEnd }) {
     let finalBuf = '';
     rec.onstart = () => { setIsListening(true); setMicError(''); };
     rec.onerror = ev => { if (ev.error === 'not-allowed') setMicError('Microphone denied.'); else if (ev.error !== 'no-speech') setMicError(`Mic: ${ev.error}`); };
-    rec.onend   = () => { setIsListening(false); setInterimText(''); if (recognitionRef.current === rec) recognitionRef.current = null; };
+    rec.onend   = () => {
+      setIsListening(false); setInterimText('');
+      if (recognitionRef.current === rec) recognitionRef.current = null;
+      // Auto-restart if the engine crashed but we still want to be listening
+      if (wantListenRef.current) {
+        setTimeout(() => { if (wantListenRef.current) startListening(); }, 600);
+      }
+    };
     rec.onresult = event => {
       let newFinal = ''; let interim = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -925,11 +950,13 @@ function SessionScreen({ cfg, onEnd }) {
         debounceRef.current = setTimeout(() => { finalBuf = ''; }, 5000);
       }
     };
+    wantListenRef.current = true;
     rec.start(); recognitionRef.current = rec;
     startRecording();
   }
 
   function stopListening() {
+    wantListenRef.current = false; // prevent auto-restart
     clearTimeout(debounceRef.current);
     if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch {} recognitionRef.current = null; }
     setIsListening(false); setInterimText('');
@@ -962,6 +989,8 @@ function SessionScreen({ cfg, onEnd }) {
   async function handleEnd() {
     stopListening();
     clearInterval(timerRef.current);
+    // Abort any in-flight AI streaming fetch
+    abortCtrlRef.current?.abort();
     const audioBlob = await stopRecording();
     if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
     onEnd({ entries: entriesRef.current, transcript: transcriptRef.current, duration: sessionTimeRef.current, audioBlob });
@@ -1195,7 +1224,7 @@ function NotesScreen({ cfg, sessionData, onRestart, onHistory }) {
     setGen(true);
     try {
       const qaPairs = sessionData.entries.filter(e => e.a && !e.a.startsWith('Error:')).map((e,i) => `Q${i+1}: ${e.q}\nA${i+1}: ${e.a}`).join('\n\n');
-      const text = await callAnthropic(cfg.apiKey, cfg.model,
+      const text = await callAI(cfg,
         [{ role:'user', content:`Interview for "${cfg.jobTitle}" (${formatTime(sessionData.duration||0)}):\n\n${qaPairs}\n\nGenerate a structured post-session debrief:\n1. Session Overview\n2. Key Questions & Best Answers (top 3â€“5)\n3. Topics Covered\n4. Action Items\n5. Strengths Demonstrated\n6. Areas to Improve\n\nBe specific and actionable.` }],
         'You are an expert interview coach writing a post-session debrief. Be honest, specific, actionable.', null);
       setNotes(text);
