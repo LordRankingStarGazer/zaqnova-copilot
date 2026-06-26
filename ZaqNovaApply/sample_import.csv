@@ -1,0 +1,4 @@
+company_name,company_url,job_title,job_url,job_description,location,skills,source,priority
+Acme Corp,https://acme.example,Senior Frontend Engineer,https://acme.example/jobs/123,"Build responsive web apps with React and TypeScript. 5+ years required. Experience with accessibility and design systems preferred.",Remote,React;TypeScript;CSS;Accessibility,LinkedIn,High
+Globex,https://globex.example,Full Stack Developer,https://globex.example/careers/45,"Node.js and React across the stack. Postgres, REST APIs, CI/CD. Mid-level.",Hybrid - Austin,Node.js;React;PostgreSQL;REST,Indeed,Medium
+Initech,https://initech.example,UI Engineer,https://initech.example/jobs/9,"Own the component library. Strong CSS, design tokens, and Storybook.",On-site - NYC,CSS;Storybook;Design Tokens,Company site,Low
