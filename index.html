@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -27,7 +27,7 @@
     .pulse-ring       { animation: pulse-ring       1.4s ease infinite; }
     .pulse-ring-amber { animation: pulse-ring-amber 2s   ease infinite; }
     .pulse-ring-blue  { animation: pulse-ring-blue  2s   ease infinite; }
-    .blink::after     { content:'â–‹'; animation: blink-cursor 1s infinite; color:#3b82f6; }
+    .blink::after     { content:'▋'; animation: blink-cursor 1s infinite; color:#3b82f6; }
     .fade-up          { animation: fadeUp 0.18s ease; }
     .spinner          { animation: spin 0.7s linear infinite; }
     .live-dot         { animation: live-dot 1.2s ease infinite; }
@@ -45,9 +45,9 @@
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 const LS_API_KEY      = 'zaqnova_api_key';
 const LS_OPENAI_KEY   = 'zaqnova_openai_key';
 const LS_GEMINI_KEY   = 'zaqnova_gemini_key';
@@ -60,22 +60,22 @@ const MAX_RESUME_DOCS = 5;
 const MAX_CTX_DOCS    = 8;
 const HISTORY_TTL_MS  = 30 * 24 * 60 * 60 * 1000;
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 // MODELS
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 const MODELS = [
   // Anthropic
-  { id: 'claude-sonnet-4-20250514',  provider:'anthropic', group:'Anthropic', label:'Claude Sonnet 4',  range:'~$0.10â€“$0.25', note:'Recommended' },
-  { id: 'claude-haiku-4-5-20251001', provider:'anthropic', group:'Anthropic', label:'Claude Haiku 4.5', range:'~$0.02â€“$0.06', note:'Fastest & cheapest' },
-  { id: 'claude-opus-4-5',           provider:'anthropic', group:'Anthropic', label:'Claude Opus 4.5',  range:'~$0.50â€“$1.20', note:'Most capable' },
+  { id: 'claude-sonnet-4-20250514',  provider:'anthropic', group:'Anthropic', label:'Claude Sonnet 4',  range:'~$0.10–$0.25', note:'Recommended' },
+  { id: 'claude-haiku-4-5-20251001', provider:'anthropic', group:'Anthropic', label:'Claude Haiku 4.5', range:'~$0.02–$0.06', note:'Fastest & cheapest' },
+  { id: 'claude-opus-4-5',           provider:'anthropic', group:'Anthropic', label:'Claude Opus 4.5',  range:'~$0.50–$1.20', note:'Most capable' },
   // OpenAI
-  { id: 'gpt-4o',                    provider:'openai',    group:'OpenAI',    label:'GPT-4o',           range:'~$0.15â€“$0.40', note:'Recommended' },
-  { id: 'gpt-4o-mini',               provider:'openai',    group:'OpenAI',    label:'GPT-4o mini',      range:'~$0.02â€“$0.06', note:'Fast & cheap' },
-  { id: 'o4-mini',                   provider:'openai',    group:'OpenAI',    label:'o4-mini',          range:'~$0.10â€“$0.30', note:'Reasoning' },
+  { id: 'gpt-4o',                    provider:'openai',    group:'OpenAI',    label:'GPT-4o',           range:'~$0.15–$0.40', note:'Recommended' },
+  { id: 'gpt-4o-mini',               provider:'openai',    group:'OpenAI',    label:'GPT-4o mini',      range:'~$0.02–$0.06', note:'Fast & cheap' },
+  { id: 'o4-mini',                   provider:'openai',    group:'OpenAI',    label:'o4-mini',          range:'~$0.10–$0.30', note:'Reasoning' },
   // Google Gemini
-  { id: 'gemini-2.0-flash',          provider:'gemini',    group:'Google',    label:'Gemini 2.0 Flash', range:'~$0.01â€“$0.03', note:'Fastest' },
-  { id: 'gemini-1.5-pro-latest',     provider:'gemini',    group:'Google',    label:'Gemini 1.5 Pro',   range:'~$0.08â€“$0.25', note:'Powerful' },
-  { id: 'gemini-1.5-flash-latest',   provider:'gemini',    group:'Google',    label:'Gemini 1.5 Flash', range:'~$0.02â€“$0.06', note:'Fast' },
+  { id: 'gemini-2.0-flash',          provider:'gemini',    group:'Google',    label:'Gemini 2.0 Flash', range:'~$0.01–$0.03', note:'Fastest' },
+  { id: 'gemini-1.5-pro-latest',     provider:'gemini',    group:'Google',    label:'Gemini 1.5 Pro',   range:'~$0.08–$0.25', note:'Powerful' },
+  { id: 'gemini-1.5-flash-latest',   provider:'gemini',    group:'Google',    label:'Gemini 1.5 Flash', range:'~$0.02–$0.06', note:'Fast' },
 ];
 function getProvider(modelId) { return MODELS.find(m => m.id === modelId)?.provider || 'anthropic'; }
 function getModelMeta(modelId) { return MODELS.find(m => m.id === modelId) || MODELS[0]; }
@@ -86,9 +86,9 @@ function getActiveKey(cfg) {
   return cfg.apiKey || '';
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 // POPUP HTML
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 const POPUP_STYLES = `
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#080c14;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden;transition:opacity .2s}
@@ -107,7 +107,7 @@ body{background:#080c14;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 .qtxt{font-size:12px;color:#64748b;line-height:1.5;margin-bottom:12px}
 .albl{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#3b82f6;margin-bottom:5px;font-weight:700}
 .atxt{font-size:13px;color:#e2e8f0;line-height:1.75;white-space:pre-wrap;word-break:break-word}
-.atxt.streaming::after{content:'â–‹';animation:bl 1s infinite;color:#3b82f6}
+.atxt.streaming::after{content:'▋';animation:bl 1s infinite;color:#3b82f6}
 @keyframes bl{0%,50%{opacity:1}51%,100%{opacity:0}}
 .cbtn{margin-top:10px;padding:5px 11px;background:transparent;border:1px solid #1e293b;border-radius:6px;color:#475569;font-size:11px;cursor:pointer;transition:all .15s}
 .cbtn:hover{background:#0f172a;color:#e2e8f0;border-color:#334155}
@@ -121,7 +121,7 @@ body{background:#080c14;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 const POPUP_SCRIPT = `
 var entries=[];
 window.addEventListener('message',function(e){
-  // Only accept messages from our direct opener â€” reject foreign origins
+  // Only accept messages from our direct opener — reject foreign origins
   if(e.source!==window.opener) return;
   var d=e.data; if(!d||!d.t) return;
   if(d.t==='add'){entries.push(d.entry);render();}
@@ -133,9 +133,9 @@ window.addEventListener('message',function(e){
 function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\'/g,'&#39;');}
 function render(){
   var r=document.getElementById('root');
-  if(!entries.length){r.innerHTML='<div class="empty"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Waiting for questionsâ€¦</span><span style="font-size:11px;color:#1e293b">Auto-detect is active</span></div>';return;}
+  if(!entries.length){r.innerHTML='<div class="empty"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Waiting for questions…</span><span style="font-size:11px;color:#1e293b">Auto-detect is active</span></div>';return;}
   r.innerHTML=entries.map(function(en){
-    if(en.loading)return'<div class="proc"><div class="spin"></div><span style="font-size:12px;color:#475569">Generating answerâ€¦</span></div>';
+    if(en.loading)return'<div class="proc"><div class="spin"></div><span style="font-size:12px;color:#475569">Generating answer…</span></div>';
     var sa=en.streaming?' streaming':'';
     return'<div class="card" id="c'+en.id+'"><div class="qlbl">Question</div><div class="qtxt">'+esc(en.q)+'</div><div class="albl">Answer</div><div class="atxt'+sa+'">'+esc(en.a||'')+'</div>'+(en.streaming?'':'<button class="cbtn" onclick="cp(this,\''+en.id+'\')">Copy answer</button>')+'</div>';
   }).join('');
@@ -156,9 +156,9 @@ const POPUP_HTML = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><
 <div class="footer">ZaqNova Interview CoPilot \xb7 Ctrl+Shift+H to hide</div>
 <script>${POPUP_SCRIPT}<\/script></body></html>`;
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 // UTILITIES
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 let _id = 0;
 const uid = () => `${Date.now()}-${++_id}`;
 
@@ -207,7 +207,7 @@ async function extractFileText(file) {
   const n = file.name.toLowerCase();
   if (file.type === 'application/pdf' || n.endsWith('.pdf')) return extractPdfText(file);
   if (n.endsWith('.docx') || file.type.includes('wordprocessingml')) return extractDocxText(file);
-  if (n.endsWith('.doc')) throw new Error('.doc not supported â€” save as .docx or .pdf');
+  if (n.endsWith('.doc')) throw new Error('.doc not supported — save as .docx or .pdf');
   return file.text();
 }
 
@@ -221,9 +221,9 @@ function isQuestion(text) {
   return QUESTION_STARTERS.some(s => l.startsWith(s));
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 // HISTORY STORAGE
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 function loadHistory() {
   try {
     const raw = localStorage.getItem(LS_HISTORY);
@@ -250,9 +250,9 @@ function deleteHistoryItem(id) {
   try { localStorage.setItem(LS_HISTORY, JSON.stringify(loadHistory().filter(s => s.id !== id))); } catch {}
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 // AI
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 async function callAnthropic(apiKey, model, messages, system, onChunk, signal) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST', signal,
@@ -410,7 +410,7 @@ function callAIVision(cfg, base64Image, prompt) {
 
 function buildSystemPrompt(cfg) {
   const parts = [
-    'You are a personal interview coach helping a candidate answer questions live during a job interview. Be concise, confident, and direct. Sound completely natural â€” like a real person speaking.',
+    'You are a personal interview coach helping a candidate answer questions live during a job interview. Be concise, confident, and direct. Sound completely natural — like a real person speaking.',
     'Keep answers to 3-5 sentences. Lead with the most impressive point.',
     `Job role: ${cfg.jobTitle || 'Not specified'}.`,
   ];
@@ -423,9 +423,9 @@ function buildSystemPrompt(cfg) {
   return parts.join('\n');
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 // DOCUMENT LIST COMPONENT
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 function DocumentList({ docs, onChange, label, maxDocs, hint }) {
   const inputRef = useRef();
   const [adding, setAdding] = useState(false);
@@ -463,7 +463,7 @@ function DocumentList({ docs, onChange, label, maxDocs, hint }) {
           className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-semibold">
           {adding ? <div className="w-3 h-3 border border-slate-600 border-t-blue-400 rounded-full spinner" />
             : <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>}
-          {adding ? 'Readingâ€¦' : 'Add'}
+          {adding ? 'Reading…' : 'Add'}
         </button>
       </div>
       <input ref={inputRef} type="file" accept=".pdf,.docx,.txt" multiple onChange={handleFiles} />
@@ -485,19 +485,19 @@ function DocumentList({ docs, onChange, label, maxDocs, hint }) {
       </div>
       {addErr && <p className="text-xs text-red-400 mt-1.5">{addErr}</p>}
       <div className="flex items-center justify-between mt-1.5">
-        <p className="text-xs text-slate-700">.pdf \xb7 .docx \xb7 .txt â€” select multiple</p>
+        <p className="text-xs text-slate-700">.pdf \xb7 .docx \xb7 .txt — select multiple</p>
         {docs.length >= maxDocs && <p className="text-xs text-slate-600">Max {maxDocs} docs</p>}
       </div>
     </div>
   );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 // SETUP SCREEN
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 const PROVIDER_LABELS = { anthropic: 'Anthropic', openai: 'OpenAI', gemini: 'Google' };
 const PROVIDER_COLORS = { anthropic: 'orange', openai: 'green', gemini: 'blue' };
-const PROVIDER_PLACEHOLDERS = { anthropic: 'sk-ant-api03-â€¦', openai: 'sk-proj-â€¦', gemini: 'AIzaSyâ€¦' };
+const PROVIDER_PLACEHOLDERS = { anthropic: 'sk-ant-api03-…', openai: 'sk-proj-…', gemini: 'AIzaSy…' };
 const PROVIDER_LINKS = {
   anthropic: 'https://console.anthropic.com/settings/keys',
   openai: 'https://platform.openai.com/api-keys',
@@ -529,7 +529,7 @@ function ApiKeyField({ provider, value, onChange, isActive }) {
           {isActive && <span className={`text-xs px-1.5 py-0.5 rounded font-semibold text-${c}-400 bg-${c}-500/10`}>Active</span>}
         </div>
         <a href={PROVIDER_LINKS[provider]} target="_blank" rel="noopener noreferrer"
-          className="text-xs text-slate-600 hover:text-blue-400 transition-colors">Get key â†—</a>
+          className="text-xs text-slate-600 hover:text-blue-400 transition-colors">Get key ↗</a>
       </div>
       <input type="password" value={value} onChange={e => handleChange(e.target.value)}
         placeholder={PROVIDER_PLACEHOLDERS[provider]}
@@ -598,20 +598,20 @@ function SetupScreen({ onStart, onHistory }) {
 
         <div className="bg-[#0b1120] border border-[#0f172a] rounded-2xl p-6 space-y-5">
 
-          {/* Model â€” shown first so key fields highlight correctly */}
+          {/* Model — shown first so key fields highlight correctly */}
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">AI Model</label>
             <select value={model} onChange={e => setModel(e.target.value)}
               className="w-full bg-[#080c14] border border-[#1e293b] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors">
               {groups.map(g => (
-                <optgroup key={g} label={`â”€â”€ ${g} â”€â”€`}>
+                <optgroup key={g} label={`── ${g} ──`}>
                   {MODELS.filter(m => m.group === g).map(m => (
-                    <option key={m.id} value={m.id}>{m.label} â€” {m.note}</option>
+                    <option key={m.id} value={m.id}>{m.label} — {m.note}</option>
                   ))}
                 </optgroup>
               ))}
             </select>
-            <p className="text-xs text-slate-600 mt-1.5">Estimated cost / 30 min session: <span className="text-blue-400 font-semibold">{selectedMeta?.range}</span> Â· {selectedMeta?.note}</p>
+            <p className="text-xs text-slate-600 mt-1.5">Estimated cost / 30 min session: <span className="text-blue-400 font-semibold">{selectedMeta?.range}</span> · {selectedMeta?.note}</p>
           </div>
 
           {/* API Keys */}
@@ -637,10 +637,10 @@ function SetupScreen({ onStart, onHistory }) {
           {/* Docs */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="bg-[#080c14] rounded-xl border border-[#0f172a] p-4">
-              <DocumentList docs={resumeDocs} onChange={setResumeDocs} label="Resume Documents" maxDocs={MAX_RESUME_DOCS} hint="Upload resume(s) Â· .pdf .docx .txt" />
+              <DocumentList docs={resumeDocs} onChange={setResumeDocs} label="Resume Documents" maxDocs={MAX_RESUME_DOCS} hint="Upload resume(s) · .pdf .docx .txt" />
             </div>
             <div className="bg-[#080c14] rounded-xl border border-[#0f172a] p-4">
-              <DocumentList docs={contextDocs} onChange={setContextDocs} label="Context Documents" maxDocs={MAX_CTX_DOCS} hint="Job desc, notes, prep docsâ€¦" />
+              <DocumentList docs={contextDocs} onChange={setContextDocs} label="Context Documents" maxDocs={MAX_CTX_DOCS} hint="Job desc, notes, prep docs…" />
             </div>
           </div>
 
@@ -685,7 +685,7 @@ function SetupScreen({ onStart, onHistory }) {
                     ))}
                   </div>
                 ))}
-                <p className="text-xs text-slate-700 pt-1.5 px-1">~20 questions Â· 800-token prompt Â· 200-token answers</p>
+                <p className="text-xs text-slate-700 pt-1.5 px-1">~20 questions · 800-token prompt · 200-token answers</p>
               </div>
             )}
           </div>
@@ -700,15 +700,15 @@ function SetupScreen({ onStart, onHistory }) {
             </div>
           </button>
         </div>
-        <p className="text-center text-xs text-slate-700 mt-3">Answer popup not captured by Zoom/Teams/Meet Â· Keys saved locally on your device</p>
+        <p className="text-center text-xs text-slate-700 mt-3">Answer popup not captured by Zoom/Teams/Meet · Keys saved locally on your device</p>
       </div>
     </div>
   );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 // SESSION SCREEN
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 function SessionScreen({ cfg, onEnd }) {
   const [entries, setEntries]           = useState([]);
   const [transcript, setTranscript]     = useState([]);
@@ -760,7 +760,7 @@ function SessionScreen({ cfg, onEnd }) {
 
   useEffect(() => {
     if (window.electronAPI?.onAnswerVisibilityChanged) {
-      // Returns an unsubscribe fn â€” clean up to prevent IPC listener accumulation
+      // Returns an unsubscribe fn — clean up to prevent IPC listener accumulation
       const unsub = window.electronAPI.onAnswerVisibilityChanged(isHidden => setPopupHidden(isHidden));
       return () => { if (typeof unsub === 'function') unsub(); };
     }
@@ -800,7 +800,7 @@ function SessionScreen({ cfg, onEnd }) {
 
   function showStatus(msg, ms = 2500) { setStatusMsg(msg); setTimeout(() => setStatusMsg(''), ms); }
 
-  // â”€â”€ Recording â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Recording ──────────────────────────────────────────────────────────────
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -827,7 +827,7 @@ function SessionScreen({ cfg, onEnd }) {
     });
   }
 
-  // â”€â”€ AI Answer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── AI Answer ──────────────────────────────────────────────────────────────
   async function processQuestion(question) {
     if (!question.trim() || question.trim() === lastQRef.current) return;
     lastQRef.current = question.trim();
@@ -857,19 +857,19 @@ function SessionScreen({ cfg, onEnd }) {
       setEntries(prev => prev.map(e => e.id === id ? { ...e, loading: false, streaming: false, a: final } : e));
       postToPopup({ t: 'upd', id, patch: { loading: false, streaming: false, a: final } });
     } catch (err) {
-      if (err.name === 'AbortError') return; // session ended â€” discard silently
+      if (err.name === 'AbortError') return; // session ended — discard silently
       const msg = `Error: ${err.message}`;
       setEntries(prev => prev.map(e => e.id === id ? { ...e, loading: false, streaming: false, a: msg } : e));
       postToPopup({ t: 'upd', id, patch: { loading: false, streaming: false, a: msg } });
-      showStatus('API error â€” check key & network');
+      showStatus('API error — check key & network');
     }
   }
 
-  // â”€â”€ Screen Capture + Vision â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Screen Capture + Vision ────────────────────────────────────────────────
   async function captureScreen() {
     if (capturing) return;
     setCapturing(true);
-    showStatus('Select the window to captureâ€¦', 8000);
+    showStatus('Select the window to capture…', 8000);
     let stream = null;
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'window' }, audio: false });
@@ -882,17 +882,17 @@ function SessionScreen({ cfg, onEnd }) {
       canvas.width = video.videoWidth; canvas.height = video.videoHeight;
       canvas.getContext('2d').drawImage(video, 0, 0);
       const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-      showStatus('Analyzing screenshotâ€¦', 6000);
+      showStatus('Analyzing screenshot…', 6000);
       const result = await callAIVision(cfg, base64,
         'This is a screenshot from a live job interview (Zoom, Teams, Google Meet, or similar). ' +
-        'Find the most recent interview question visible anywhere â€” in chat, captions, slides, text on screen. ' +
+        'Find the most recent interview question visible anywhere — in chat, captions, slides, text on screen. ' +
         'Return ONLY the question text, nothing else. If no clear interview question is visible, respond exactly: NO_QUESTION'
       );
       if (result && result !== 'NO_QUESTION' && result.length > 4) {
         const id = uid();
         setTranscript(prev => [...prev, { id, type: 'question', text: result, source: 'capture' }]);
         processQuestion(result);
-        showStatus('ðŸ“· Question captured â€” answering!', 2500);
+        showStatus('📷 Question captured — answering!', 2500);
       } else {
         showStatus('No interview question found in screenshot', 3000);
       }
@@ -900,16 +900,16 @@ function SessionScreen({ cfg, onEnd }) {
       if (err.name === 'NotAllowedError' || err.name === 'AbortError') showStatus('Screen capture cancelled');
       else showStatus('Capture failed: ' + err.message, 3500);
     } finally {
-      // Always release the capture stream â€” even if canvas/vision step throws
+      // Always release the capture stream — even if canvas/vision step throws
       stream?.getTracks().forEach(t => t.stop());
     }
     setCapturing(false);
   }
 
-  // â”€â”€ Speech â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Speech ─────────────────────────────────────────────────────────────────
   function startListening() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setMicError('Speech recognition not supported â€” use Chrome or Edge.'); return; }
+    if (!SR) { setMicError('Speech recognition not supported — use Chrome or Edge.'); return; }
     const rec = new SR(); rec.continuous = true; rec.interimResults = true; rec.lang = 'en-US';
     let finalBuf = '';
     rec.onstart = () => { setIsListening(true); setMicError(''); };
@@ -980,7 +980,7 @@ function SessionScreen({ cfg, onEnd }) {
     const lines = transcriptRef.current; if (!lines.length) { showStatus('No transcript yet'); return; }
     const date = new Date().toISOString().slice(0,10);
     triggerDownload(
-      `ZaqNova Interview CoPilot â€” Live Transcript\n${cfg.jobTitle} \xb7 ${formatTime(sessionTimeRef.current)} \xb7 ${date}\n${'â”€'.repeat(50)}\n\n` +
+      `ZaqNova Interview CoPilot — Live Transcript\n${cfg.jobTitle} \xb7 ${formatTime(sessionTimeRef.current)} \xb7 ${date}\n${'─'.repeat(50)}\n\n` +
       lines.map(t => `[${t.type==='question'?'QUESTION':'SPEECH  '}]  ${t.text}`).join('\n\n'),
       'text/plain', `transcript-${date}.txt`
     );
@@ -996,11 +996,11 @@ function SessionScreen({ cfg, onEnd }) {
     onEnd({ entries: entriesRef.current, transcript: transcriptRef.current, duration: sessionTimeRef.current, audioBlob });
   }
 
-  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="h-screen bg-[#080c14] flex flex-col overflow-hidden">
 
-      {/* â”€â”€ TOP NAV BAR â”€â”€ */}
+      {/* ── TOP NAV BAR ── */}
       <div className="flex items-center justify-between px-3 py-2 bg-[#0b1120] border-b border-[#0f172a] flex-shrink-0 gap-2">
         <div className="flex items-center gap-2.5">
           <span className="text-xs font-bold text-blue-400 tracking-wider hidden sm:block">ZAQNOVA</span>
@@ -1028,14 +1028,14 @@ function SessionScreen({ cfg, onEnd }) {
         </div>
       </div>
 
-      {/* â”€â”€ CONTROL BAR â”€â”€ */}
+      {/* ── CONTROL BAR ── */}
       <div className="flex items-center gap-2 px-3 py-2.5 bg-[#080c14] border-b border-[#0f172a] flex-shrink-0 flex-wrap">
         {/* Mic */}
         <button onClick={() => isListening ? stopListening() : startListening()}
           className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all flex-shrink-0 ${isListening ? 'bg-red-500/20 text-red-400 border border-red-500/50 pulse-ring' : 'bg-[#0b1120] text-slate-300 border border-[#1e293b] hover:border-blue-500/50 hover:text-blue-300'}`}>
           <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isListening ? 'bg-red-400 live-dot' : 'bg-slate-600'}`} />
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"/></svg>
-          {isListening ? 'Listeningâ€¦' : 'Start Mic'}
+          {isListening ? 'Listening…' : 'Start Mic'}
         </button>
 
         {/* Screen Capture */}
@@ -1046,7 +1046,7 @@ function SessionScreen({ cfg, onEnd }) {
             ? <div className="w-3.5 h-3.5 border border-slate-600 border-t-blue-400 rounded-full spinner" />
             : <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"/><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z"/></svg>
           }
-          {capturing ? 'Analyzingâ€¦' : 'Capture Screen'}
+          {capturing ? 'Analyzing…' : 'Capture Screen'}
         </button>
 
         {/* Auto-answer toggle */}
@@ -1083,16 +1083,16 @@ function SessionScreen({ cfg, onEnd }) {
         )}
       </div>
 
-      {/* â”€â”€ ALERTS â”€â”€ */}
+      {/* ── ALERTS ── */}
       {popupBlocked && (
         <div className="mx-3 mt-2 flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 flex-shrink-0">
           <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z"/></svg>
-          <p className="text-xs text-amber-400">Popup blocked â€” allow popups then <button onClick={openPopup} className="underline">try again</button>. Answers show in the panel below.</p>
+          <p className="text-xs text-amber-400">Popup blocked — allow popups then <button onClick={openPopup} className="underline">try again</button>. Answers show in the panel below.</p>
         </div>
       )}
       {micError && <div className="mx-3 mt-2 bg-red-500/10 border border-red-500/30 rounded-xl p-2 text-xs text-red-400 flex-shrink-0">{micError}</div>}
 
-      {/* â”€â”€ MAIN PANELS â”€â”€ */}
+      {/* ── MAIN PANELS ── */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
 
         {/* LEFT: LIVE TRANSCRIPT */}
@@ -1127,7 +1127,7 @@ function SessionScreen({ cfg, onEnd }) {
                     {t.text}
                     {t.type === 'question' && (
                       <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded font-semibold ${t.source === 'capture' ? 'text-purple-400 bg-purple-400/10' : 'text-blue-400 bg-blue-400/10'}`}>
-                        {t.source === 'capture' ? 'ðŸ“· captured' : 'Qâ†’AI'}
+                        {t.source === 'capture' ? '📷 captured' : 'Q→AI'}
                       </span>
                     )}
                   </p>
@@ -1158,7 +1158,7 @@ function SessionScreen({ cfg, onEnd }) {
           <div className="p-2.5 border-t border-[#0f172a] flex gap-2 flex-shrink-0">
             <input type="text" value={manualInput} onChange={e => setManualInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askManual(); } }}
-              placeholder="Type a question and press Answerâ€¦"
+              placeholder="Type a question and press Answer…"
               className="flex-1 bg-[#0b1120] border border-[#1e293b] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 transition-colors" />
             <button onClick={askManual} disabled={!manualInput.trim()}
               className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white rounded-lg text-xs font-bold transition-colors">
@@ -1173,7 +1173,7 @@ function SessionScreen({ cfg, onEnd }) {
           <div className="px-3 py-2 border-b border-[#0f172a] flex items-center justify-between flex-shrink-0">
             <span className="text-xs text-slate-600 font-semibold uppercase tracking-wider">AI Answers</span>
             {popupOpen && !popupHidden
-              ? <span className="text-xs text-green-400/60">â†’ Also in popup</span>
+              ? <span className="text-xs text-green-400/60">→ Also in popup</span>
               : <span className="text-xs text-slate-700">Popup closed</span>}
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
@@ -1189,7 +1189,7 @@ function SessionScreen({ cfg, onEnd }) {
                 <p className="text-xs text-slate-500 mb-2.5 leading-relaxed">{entry.q}</p>
                 <p className="text-xs text-blue-400 font-semibold uppercase tracking-wider mb-1">Answer</p>
                 {entry.loading
-                  ? <div className="flex items-center gap-2 text-slate-600 text-xs py-1"><div className="w-3 h-3 border border-slate-700 border-t-blue-500 rounded-full spinner" />Generatingâ€¦</div>
+                  ? <div className="flex items-center gap-2 text-slate-600 text-xs py-1"><div className="w-3 h-3 border border-slate-700 border-t-blue-500 rounded-full spinner" />Generating…</div>
                   : <>
                       <p className={`text-xs text-slate-200 leading-relaxed whitespace-pre-wrap ${entry.streaming ? 'blink' : ''}`}>{entry.a}</p>
                       {!entry.streaming && entry.a && !entry.a.startsWith('Error:') && (
@@ -1207,9 +1207,9 @@ function SessionScreen({ cfg, onEnd }) {
   );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 // NOTES SCREEN
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 function NotesScreen({ cfg, sessionData, onRestart, onHistory }) {
   const [notes, setNotes]    = useState('');
   const [generating, setGen] = useState(false);
@@ -1225,24 +1225,24 @@ function NotesScreen({ cfg, sessionData, onRestart, onHistory }) {
     try {
       const qaPairs = sessionData.entries.filter(e => e.a && !e.a.startsWith('Error:')).map((e,i) => `Q${i+1}: ${e.q}\nA${i+1}: ${e.a}`).join('\n\n');
       const text = await callAI(cfg,
-        [{ role:'user', content:`Interview for "${cfg.jobTitle}" (${formatTime(sessionData.duration||0)}):\n\n${qaPairs}\n\nGenerate a structured post-session debrief:\n1. Session Overview\n2. Key Questions & Best Answers (top 3â€“5)\n3. Topics Covered\n4. Action Items\n5. Strengths Demonstrated\n6. Areas to Improve\n\nBe specific and actionable.` }],
+        [{ role:'user', content:`Interview for "${cfg.jobTitle}" (${formatTime(sessionData.duration||0)}):\n\n${qaPairs}\n\nGenerate a structured post-session debrief:\n1. Session Overview\n2. Key Questions & Best Answers (top 3–5)\n3. Topics Covered\n4. Action Items\n5. Strengths Demonstrated\n6. Areas to Improve\n\nBe specific and actionable.` }],
         'You are an expert interview coach writing a post-session debrief. Be honest, specific, actionable.', null);
       setNotes(text);
     } catch (err) {
       setError(`Notes generation failed: ${err.message}`);
-      setNotes(sessionData.entries.filter(e => e.a).map((e,i) => `Q${i+1}: ${e.q}\n\nA: ${e.a}`).join('\n\nâ€•â€•â€•â€•â€•\n\n') || 'No answers recorded.');
+      setNotes(sessionData.entries.filter(e => e.a).map((e,i) => `Q${i+1}: ${e.q}\n\nA: ${e.a}`).join('\n\n―――――\n\n') || 'No answers recorded.');
     }
     setGen(false);
   }
 
   function dlNotes() {
-    const t = `ZaqNova Interview CoPilot â€” Session Notes\n${cfg.jobTitle} \xb7 ${formatTime(sessionData?.duration||0)} \xb7 ${date}\n${'â•'.repeat(55)}\n\n${notes}`;
+    const t = `ZaqNova Interview CoPilot — Session Notes\n${cfg.jobTitle} \xb7 ${formatTime(sessionData?.duration||0)} \xb7 ${date}\n${'═'.repeat(55)}\n\n${notes}`;
     triggerDownload(t, 'text/plain', `notes-${date}.txt`);
   }
   function dlTranscript() {
     const lines = sessionData?.transcript || []; if (!lines.length) return;
     triggerDownload(
-      `ZaqNova Interview CoPilot â€” Transcript\n${cfg.jobTitle} \xb7 ${formatTime(sessionData?.duration||0)} \xb7 ${date}\n${'â”€'.repeat(50)}\n\n` +
+      `ZaqNova Interview CoPilot — Transcript\n${cfg.jobTitle} \xb7 ${formatTime(sessionData?.duration||0)} \xb7 ${date}\n${'─'.repeat(50)}\n\n` +
       lines.map(l => `[${l.type==='question'?'QUESTION':'SPEECH  '}]  ${l.text}`).join('\n\n'),
       'text/plain', `transcript-${date}.txt`);
   }
@@ -1262,12 +1262,12 @@ function NotesScreen({ cfg, sessionData, onRestart, onHistory }) {
             <span className="text-xs font-bold text-blue-400 tracking-wider">ZAQNOVA</span>
             <span className="text-xs text-slate-600">Session Notes</span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">{cfg.jobTitle} \xb7 {formatTime(sessionData?.duration||0)} \xb7 Saved to history âœ“</p>
+          <p className="text-xs text-slate-500 mt-0.5">{cfg.jobTitle} \xb7 {formatTime(sessionData?.duration||0)} \xb7 Saved to history ✓</p>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           <button onClick={() => { navigator.clipboard.writeText(notes).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }} disabled={!notes||generating}
             className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors disabled:opacity-30">
-            {copied ? 'âœ“ Copied' : 'Copy Notes'}
+            {copied ? '✓ Copied' : 'Copy Notes'}
           </button>
           <button onClick={dlNotes} disabled={!notes||generating} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors disabled:opacity-30">Notes .txt</button>
           {(sessionData?.transcript?.length > 0) && <button onClick={dlTranscript} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1e293b] text-slate-400 hover:border-slate-600 hover:text-white transition-colors">Transcript .txt</button>}
@@ -1279,7 +1279,7 @@ function NotesScreen({ cfg, sessionData, onRestart, onHistory }) {
       <div className="flex-1 max-w-3xl mx-auto w-full p-4 md:p-6">
         {error && <div className="mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-400">{error}</div>}
         {generating
-          ? <div className="flex flex-col items-center justify-center py-24 gap-4 text-slate-500"><div className="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full spinner" /><span className="text-sm">Generating debriefâ€¦</span></div>
+          ? <div className="flex flex-col items-center justify-center py-24 gap-4 text-slate-500"><div className="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full spinner" /><span className="text-sm">Generating debrief…</span></div>
           : <div className="bg-[#0b1120] border border-[#0f172a] rounded-2xl p-5 md:p-6"><pre className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">{notes}</pre></div>
         }
         {!generating && sessionData?.entries?.filter(e => e.a && !e.a.startsWith('Error:')).length > 0 && (
@@ -1302,9 +1302,9 @@ function NotesScreen({ cfg, sessionData, onRestart, onHistory }) {
   );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 // HISTORY SCREEN
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 function HistoryScreen({ onBack }) {
   const [sessions, setSessions]                 = useState([]);
   const [expanded, setExpanded]                 = useState(null);
@@ -1318,15 +1318,15 @@ function HistoryScreen({ onBack }) {
   function dlTranscript(s) {
     const date = new Date(s.savedAt).toISOString().slice(0,10);
     triggerDownload(
-      `ZaqNova Interview CoPilot â€” Transcript\n${s.jobTitle} \xb7 ${formatTime(s.duration)} \xb7 ${date}\n${'â”€'.repeat(50)}\n\n` +
+      `ZaqNova Interview CoPilot — Transcript\n${s.jobTitle} \xb7 ${formatTime(s.duration)} \xb7 ${date}\n${'─'.repeat(50)}\n\n` +
       (s.transcriptLines||[]).map(t => `[${t.type==='question'?'QUESTION':'SPEECH  '}]  ${t.text}`).join('\n\n'),
       'text/plain', `transcript-${date}.txt`);
   }
   function dlQA(s) {
     const date = new Date(s.savedAt).toISOString().slice(0,10);
     triggerDownload(
-      `ZaqNova Interview CoPilot â€” Q&A Log\n${s.jobTitle} \xb7 ${formatTime(s.duration)} \xb7 ${date}\n${'â•'.repeat(55)}\n\n` +
-      (s.qaEntries||[]).map((e,i) => `Q${i+1}: ${e.q}\n\nA${i+1}: ${e.a}`).join('\n\n' + 'â”€'.repeat(40) + '\n\n'),
+      `ZaqNova Interview CoPilot — Q&A Log\n${s.jobTitle} \xb7 ${formatTime(s.duration)} \xb7 ${date}\n${'═'.repeat(55)}\n\n` +
+      (s.qaEntries||[]).map((e,i) => `Q${i+1}: ${e.q}\n\nA${i+1}: ${e.a}`).join('\n\n' + '─'.repeat(40) + '\n\n'),
       'text/plain', `qa-log-${date}.txt`);
   }
   function daysLeft(savedAt) { return Math.max(0, Math.ceil((HISTORY_TTL_MS - (Date.now() - savedAt)) / (24*60*60*1000))); }
@@ -1363,7 +1363,7 @@ function HistoryScreen({ onBack }) {
             <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
             <span className="text-sm">No saved sessions yet</span>
             <span className="text-xs text-slate-700 text-center max-w-xs">Sessions save automatically when you end. Kept for 30 days.</span>
-            <button onClick={onBack} className="mt-2 text-xs text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-lg hover:bg-blue-500/10 transition-colors">â† Back to Setup</button>
+            <button onClick={onBack} className="mt-2 text-xs text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-lg hover:bg-blue-500/10 transition-colors">← Back to Setup</button>
           </div>
         ) : (
           <div className="space-y-3">
@@ -1418,9 +1418,9 @@ function HistoryScreen({ onBack }) {
   );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 // APP ROOT
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 function App() {
   const [screen, setScreen]    = useState('setup');
   const [cfg, setCfg]          = useState(null);
@@ -1442,4 +1442,3 @@ ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(
 </script>
 </body>
 </html>
-
