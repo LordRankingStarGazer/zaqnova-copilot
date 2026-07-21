@@ -69,13 +69,13 @@ const MODELS = [
   { id: 'claude-haiku-4-5-20251001', provider:'anthropic', group:'Anthropic', label:'Claude Haiku 4.5', range:'~$0.02–$0.06', note:'Fastest & cheapest' },
   { id: 'claude-opus-4-8',           provider:'anthropic', group:'Anthropic', label:'Claude Opus 4.8',  range:'~$0.50–$1.20', note:'Most capable' },
   // OpenAI
-  { id: 'gpt-4o',                    provider:'openai',    group:'OpenAI',    label:'GPT-4o',           range:'~$0.15–$0.40', note:'Recommended' },
-  { id: 'gpt-4o-mini',               provider:'openai',    group:'OpenAI',    label:'GPT-4o mini',      range:'~$0.02–$0.06', note:'Fast & cheap' },
-  { id: 'o4-mini',                   provider:'openai',    group:'OpenAI',    label:'o4-mini',          range:'~$0.10–$0.30', note:'Reasoning' },
+  { id: 'gpt-5.6',                   provider:'openai',    group:'OpenAI',    label:'GPT-5.6 Sol',      range:'~$0.20–$0.50', note:'Recommended' },
+  { id: 'gpt-5.6-terra',             provider:'openai',    group:'OpenAI',    label:'GPT-5.6 Terra',    range:'~$0.08–$0.20', note:'Balanced' },
+  { id: 'gpt-5.6-luna',              provider:'openai',    group:'OpenAI',    label:'GPT-5.6 Luna',     range:'~$0.02–$0.06', note:'Fast & cheap' },
   // Google Gemini
-  { id: 'gemini-2.5-flash',          provider:'gemini',    group:'Google',    label:'Gemini 2.5 Flash', range:'~$0.02–$0.06', note:'Fast & recommended' },
-  { id: 'gemini-2.5-pro',            provider:'gemini',    group:'Google',    label:'Gemini 2.5 Pro',   range:'~$0.08–$0.25', note:'Most capable' },
-  { id: 'gemini-2.0-flash',          provider:'gemini',    group:'Google',    label:'Gemini 2.0 Flash', range:'~$0.01–$0.03', note:'Fastest' },
+  { id: 'gemini-3.6-flash',          provider:'gemini',    group:'Google',    label:'Gemini 3.6 Flash',      range:'~$0.02–$0.06', note:'Fast & recommended' },
+  { id: 'gemini-3.1-pro',            provider:'gemini',    group:'Google',    label:'Gemini 3.1 Pro',        range:'~$0.10–$0.30', note:'Most capable' },
+  { id: 'gemini-3.5-flash-lite',     provider:'gemini',    group:'Google',    label:'Gemini 3.5 Flash-Lite', range:'~$0.01–$0.03', note:'Fastest & cheapest' },
 ];
 function getProvider(modelId) { return MODELS.find(m => m.id === modelId)?.provider || 'anthropic'; }
 function getModelMeta(modelId) { return MODELS.find(m => m.id === modelId) || MODELS[0]; }
@@ -370,7 +370,7 @@ async function callAnthropicVision(apiKey, model, base64Image, prompt) {
 }
 
 async function callOpenAIVision(apiKey, model, base64Image, prompt) {
-  const vModel = model === 'gpt-4o-mini' ? 'gpt-4o-mini' : 'gpt-4o';
+  const vModel = model; // GPT-5.6 models all accept image input
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -388,7 +388,7 @@ async function callOpenAIVision(apiKey, model, base64Image, prompt) {
 }
 
 async function callGeminiVision(apiKey, model, base64Image, prompt) {
-  const vModel = model.includes('flash') ? 'gemini-2.5-flash' : 'gemini-2.5-pro';
+  const vModel = model; // Gemini 3.x models all accept image input
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${vModel}:generateContent`,
     { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
