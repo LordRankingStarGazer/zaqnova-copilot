@@ -862,10 +862,14 @@ function SessionScreen({ cfg, onEnd }) {
       postToPopup({ t: 'upd', id, patch: { loading: false, streaming: false, a: final } });
     } catch (err) {
       if (err.name === 'AbortError') return; // session ended — discard silently
-      const msg = `Error: ${err.message}`;
+      // OpenAI blocks direct browser calls (CORS) — a key can't work here.
+      const isOpenAICors = getProvider(cfg.model) === 'openai' && /failed to fetch|networkerror|load failed/i.test(err.message || '');
+      const msg = isOpenAICors
+        ? 'Error: OpenAI\'s API blocks direct browser calls, so an OpenAI key can\'t be used for live answers. Switch to an Anthropic (Claude) or Google (Gemini) model on the setup screen — both work in the browser.'
+        : `Error: ${err.message}`;
       setEntries(prev => prev.map(e => e.id === id ? { ...e, loading: false, streaming: false, a: msg } : e));
       postToPopup({ t: 'upd', id, patch: { loading: false, streaming: false, a: msg } });
-      showStatus('API error — check key & network');
+      showStatus(isOpenAICors ? 'OpenAI can\'t run in-browser — use Claude or Gemini' : 'API error — check key & network');
     }
   }
 
