@@ -75,8 +75,9 @@ const MODELS = [
   { id:'gpt-4o',                    provider:'openai',    group:'OpenAI',    label:'GPT-4o',           note:'Recommended' },
   { id:'gpt-4o-mini',               provider:'openai',    group:'OpenAI',    label:'GPT-4o mini',      note:'Fast & cheap' },
   { id:'o4-mini',                   provider:'openai',    group:'OpenAI',    label:'o4-mini',          note:'Reasoning' },
+  { id:'gemini-2.5-flash',          provider:'gemini',    group:'Google',    label:'Gemini 2.5 Flash', note:'Fast & recommended' },
+  { id:'gemini-2.5-pro',            provider:'gemini',    group:'Google',    label:'Gemini 2.5 Pro',   note:'Most capable' },
   { id:'gemini-2.0-flash',          provider:'gemini',    group:'Google',    label:'Gemini 2.0 Flash', note:'Fastest' },
-  { id:'gemini-1.5-pro-latest',     provider:'gemini',    group:'Google',    label:'Gemini 1.5 Pro',   note:'Powerful' },
 ];
 const getProvider = (id) => MODELS.find(m => m.id === id)?.provider || 'anthropic';
 const PROVIDER_META = {
@@ -188,7 +189,7 @@ function getActiveKey(cfg) {
 async function callAnthropic(apiKey, model, messages, system, maxTokens, signal) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method:'POST', signal,
-    headers:{ 'x-api-key':apiKey, 'anthropic-version':'2023-06-01', 'content-type':'application/json', 'anthropic-dangerous-allow-browser':'true' },
+    headers:{ 'x-api-key':apiKey, 'anthropic-version':'2023-06-01', 'content-type':'application/json', 'anthropic-dangerous-direct-browser-access':'true' },
     body: JSON.stringify({ model, max_tokens:maxTokens, system, messages }),
   });
   if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e?.error?.message || `Anthropic error ${res.status}`); }
@@ -199,7 +200,8 @@ async function callOpenAI(apiKey, model, messages, system, maxTokens, signal) {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method:'POST', signal,
     headers:{ 'Authorization':`Bearer ${apiKey}`, 'Content-Type':'application/json' },
-    body: JSON.stringify({ model, max_tokens:maxTokens, messages:[ ...(system?[{role:'system',content:system}]:[]), ...messages ] }),
+    // max_completion_tokens works for all chat models and is required by o-series reasoning models
+    body: JSON.stringify({ model, max_completion_tokens:maxTokens, messages:[ ...(system?[{role:'system',content:system}]:[]), ...messages ] }),
   });
   if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e?.error?.message || `OpenAI error ${res.status}`); }
   const j = await res.json();
@@ -209,8 +211,9 @@ async function callGemini(apiKey, model, messages, system, maxTokens, signal) {
   const contents = messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts:[{ text:m.content }] }));
   const body = { contents, generationConfig:{ maxOutputTokens:maxTokens } };
   if (system) body.systemInstruction = { parts:[{ text:system }] };
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    { method:'POST', signal, headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+  // Key goes in a header, not the URL — query-string keys end up in server/proxy logs.
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    { method:'POST', signal, headers:{ 'Content-Type':'application/json', 'x-goog-api-key':apiKey }, body: JSON.stringify(body) });
   if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e?.error?.message || `Gemini error ${res.status}`); }
   const j = await res.json();
   return j.candidates?.[0]?.content?.parts?.map(p => p.text||'').join('') || '';
@@ -248,7 +251,10 @@ async function callAIJSON(cfg, system, user, { maxTokens=2200, retries=1, signal
       await new Promise(r => setTimeout(r, 400 * (attempt + 1))); // backoff
     }
   }
-  throw new Error('Model returned malformed output: ' + (lastErr?.message || 'unknown'));
+  // Network / API failures should surface as themselves, not as "malformed output".
+  const msg = lastErr?.message || 'unknown';
+  if (lastErr && /fetch|network|load failed|error \d{3}/i.test(msg)) throw lastErr;
+  throw new Error('Model returned malformed output: ' + msg);
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -710,7 +716,10 @@ function AppProvider({ children }) {
     gemini: localStorage.getItem(LS.GEMINI) || '',
   }));
   const [toast, setToast] = useState(null);
-  const cfg = useMemo(() => ({ model: settings.model, keys }), [settings.model, keys]);
+  // Guard against a stale model id persisted from an older app version (would
+  // silently route to the wrong provider via getProvider's fallback).
+  const model = MODELS.some(m => m.id === settings.model) ? settings.model : MODELS[0].id;
+  const cfg = useMemo(() => ({ model, keys }), [model, keys]);
   const value = { profiles, setProfiles, jobs, setJobs, tailored, setTailored, settings, setSettings, keys, setKeys, cfg, toast, setToast };
   return <AppCtx.Provider value={value}>{children}{toast && <Toast msg={toast} onClose={() => setToast(null)} />}</AppCtx.Provider>;
 }
@@ -746,12 +755,12 @@ function ApiKeyField({ provider }) {
 }
 
 function SettingsView() {
-  const { settings, setSettings } = useApp();
+  const { setSettings, cfg } = useApp();
   return <div className="max-w-2xl">
     <h2 className="text-lg font-bold text-slate-100 mb-1">Settings</h2>
     <p className="text-sm text-slate-500 mb-4">Your keys stay in this browser and are sent only to the AI provider you select. They are never logged or transmitted elsewhere.</p>
     <Field label="AI Model">
-      <Select value={settings.model} onChange={e => setSettings(s => ({ ...s, model: e.target.value }))}>
+      <Select value={cfg.model} onChange={e => setSettings(s => ({ ...s, model: e.target.value }))}>
         {Object.entries(MODELS.reduce((a,m)=>{(a[m.group]=a[m.group]||[]).push(m);return a;},{})).map(([g, ms]) =>
           <optgroup key={g} label={g}>{ms.map(m => <option key={m.id} value={m.id}>{m.label} — {m.note}</option>)}</optgroup>
         )}
