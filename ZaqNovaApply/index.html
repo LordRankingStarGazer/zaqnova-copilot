@@ -6,6 +6,12 @@
   <meta name="theme-color" content="#080c14" />
   <title>ZaqNova Apply — Resume Tailoring</title>
   <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="icon-180.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ZaqNova Apply" />
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -42,6 +48,10 @@
   // defaults the react preset to the automatic runtime, which emits a bare ES
   // `import "react/jsx-runtime"` that cannot execute in a non-module <script>.
   Babel.registerPreset('zaq-react', { presets: [[Babel.availablePresets.react, { runtime: 'classic' }]] });
+  // PWA: register the service worker so the app is installable and works offline.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+  }
 </script>
 <script type="text/babel" data-presets="zaq-react">
 const { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext } = React;
@@ -78,12 +88,14 @@ const MODELS = [
   { id:'gemini-2.5-flash',          provider:'gemini',    group:'Google',    label:'Gemini 2.5 Flash', note:'Fast & recommended' },
   { id:'gemini-2.5-pro',            provider:'gemini',    group:'Google',    label:'Gemini 2.5 Pro',   note:'Most capable' },
   { id:'gemini-2.0-flash',          provider:'gemini',    group:'Google',    label:'Gemini 2.0 Flash', note:'Fastest' },
+  { id:'chatgpt-manual',            provider:'chatgpt',   group:'ChatGPT — no API key', label:'ChatGPT (copy & paste)', note:'Uses your ChatGPT subscription' },
 ];
 const getProvider = (id) => MODELS.find(m => m.id === id)?.provider || 'anthropic';
 const PROVIDER_META = {
   anthropic:{ label:'Anthropic', ls:LS.ANTHROPIC, placeholder:'sk-ant-api03-…', link:'https://console.anthropic.com/settings/keys', color:'amber' },
   openai:   { label:'OpenAI',    ls:LS.OPENAI,    placeholder:'sk-proj-…',      link:'https://platform.openai.com/api-keys',       color:'emerald' },
   gemini:   { label:'Google',    ls:LS.GEMINI,    placeholder:'AIzaSy…',        link:'https://aistudio.google.com/app/apikey',     color:'sky' },
+  chatgpt:  { label:'ChatGPT (manual)', ls:null,  placeholder:'',               link:'https://chatgpt.com',                        color:'teal' },
 };
 
 const TONES = ['Professional','Confident','Concise','Impactful','Friendly'];
@@ -186,9 +198,23 @@ function getActiveKey(cfg) {
   return cfg.keys?.[p] || '';
 }
 
+// Merge the caller's abort signal with a hard timeout so a hung request can
+// never leave the UI spinning forever.
+const AI_TIMEOUT_MS = 120000;
+function withTimeout(signal, ms = AI_TIMEOUT_MS) {
+  const ctrl = new AbortController();
+  if (signal) {
+    if (signal.aborted) ctrl.abort(signal.reason);
+    else signal.addEventListener('abort', () => ctrl.abort(signal.reason), { once: true });
+  }
+  const t = setTimeout(() => ctrl.abort(new DOMException(`The AI request timed out after ${Math.round(ms/1000)}s`, 'TimeoutError')), ms);
+  ctrl.signal.addEventListener('abort', () => clearTimeout(t), { once: true });
+  return ctrl.signal;
+}
+
 async function callAnthropic(apiKey, model, messages, system, maxTokens, signal) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method:'POST', signal,
+    method:'POST', signal: withTimeout(signal),
     headers:{ 'x-api-key':apiKey, 'anthropic-version':'2023-06-01', 'content-type':'application/json', 'anthropic-dangerous-direct-browser-access':'true' },
     body: JSON.stringify({ model, max_tokens:maxTokens, system, messages }),
   });
@@ -198,7 +224,7 @@ async function callAnthropic(apiKey, model, messages, system, maxTokens, signal)
 }
 async function callOpenAI(apiKey, model, messages, system, maxTokens, signal) {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method:'POST', signal,
+    method:'POST', signal: withTimeout(signal),
     headers:{ 'Authorization':`Bearer ${apiKey}`, 'Content-Type':'application/json' },
     // max_completion_tokens works for all chat models and is required by o-series reasoning models
     body: JSON.stringify({ model, max_completion_tokens:maxTokens, messages:[ ...(system?[{role:'system',content:system}]:[]), ...messages ] }),
@@ -213,16 +239,31 @@ async function callGemini(apiKey, model, messages, system, maxTokens, signal) {
   if (system) body.systemInstruction = { parts:[{ text:system }] };
   // Key goes in a header, not the URL — query-string keys end up in server/proxy logs.
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    { method:'POST', signal, headers:{ 'Content-Type':'application/json', 'x-goog-api-key':apiKey }, body: JSON.stringify(body) });
+    { method:'POST', signal: withTimeout(signal), headers:{ 'Content-Type':'application/json', 'x-goog-api-key':apiKey }, body: JSON.stringify(body) });
   if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e?.error?.message || `Gemini error ${res.status}`); }
   const j = await res.json();
   return j.candidates?.[0]?.content?.parts?.map(p => p.text||'').join('') || '';
 }
 
+// ChatGPT copy-and-paste mode: no API key. The UI shows the prompt, the user
+// runs it in chatgpt.com under their own subscription and pastes the reply back.
+// window.__zaqManualAI is installed by <ManualAIModal/>.
+async function callChatGPTManual(messages, system) {
+  if (!window.__zaqManualAI) throw new Error('ChatGPT manual mode is not ready — reload the app.');
+  const prompt = [
+    system ? 'SYSTEM INSTRUCTIONS (follow these exactly):\n' + system : '',
+    ...messages.map(m => m.role === 'user' ? m.content : m.role.toUpperCase() + ':\n' + m.content),
+  ].filter(Boolean).join('\n\n');
+  const text = await window.__zaqManualAI(prompt);
+  if (!text || !text.trim()) throw new Error('No response pasted — generation cancelled.');
+  return text;
+}
+
 async function callAIText(cfg, messages, system, { maxTokens=900, signal } = {}) {
-  const key = getActiveKey(cfg);
-  if (!key) throw new Error(`No API key set for ${PROVIDER_META[getProvider(cfg.model)].label}. Add one in Settings.`);
   const p = getProvider(cfg.model);
+  if (p === 'chatgpt') return callChatGPTManual(messages, system);
+  const key = getActiveKey(cfg);
+  if (!key) throw new Error(`No API key set for ${PROVIDER_META[p].label}. Add one in Settings.`);
   if (p === 'openai') return callOpenAI(key, cfg.model, messages, system, maxTokens, signal);
   if (p === 'gemini') return callGemini(key, cfg.model, messages, system, maxTokens, signal);
   return callAnthropic(key, cfg.model, messages, system, maxTokens, signal);
@@ -247,7 +288,7 @@ async function callAIJSON(cfg, system, user, { maxTokens=2200, retries=1, signal
       return extractJSON(raw);
     } catch (e) {
       lastErr = e;
-      if (e.name === 'AbortError') throw e;
+      if (e.name === 'AbortError' || /cancelled/i.test(e.message || '')) throw e;
       await new Promise(r => setTimeout(r, 400 * (attempt + 1))); // backoff
     }
   }
@@ -699,6 +740,47 @@ function Empty({ icon='📄', title, body, action }) {
   </div>;
 }
 
+// ── ChatGPT copy-and-paste dialog (subscription mode, no API key) ──
+function ManualAIModal() {
+  const [req, setReq] = useState(null); // { prompt, resolve, reject }
+  const [pasted, setPasted] = useState('');
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    window.__zaqManualAI = (prompt) => new Promise((resolve, reject) => {
+      setPasted(''); setCopied(false); setReq({ prompt, resolve, reject });
+    });
+    return () => { delete window.__zaqManualAI; };
+  }, []);
+  if (!req) return null;
+  const close = (err, val) => { setReq(null); err ? req.reject(err) : req.resolve(val); };
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(req.prompt); setCopied(true); }
+    catch { setCopied(false); }
+  };
+  return <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+    <Card className="max-w-2xl w-full p-5 fade max-h-[92vh] overflow-y-auto">
+      <h3 className="font-bold text-slate-100">Run this in ChatGPT (your subscription)</h3>
+      <ol className="text-sm text-slate-400 list-decimal ml-5 my-2 space-y-1">
+        <li>Copy the prompt below.</li>
+        <li>Paste it into <a className="text-blue-400 underline" href="https://chatgpt.com" target="_blank" rel="noopener noreferrer">chatgpt.com</a> and send it.</li>
+        <li>Copy ChatGPT's <b>entire reply</b> and paste it back here, then press Continue.</li>
+      </ol>
+      <div className="flex gap-2 mb-2">
+        <Btn onClick={copy}>{copied ? '✓ Copied' : '📋 Copy prompt'}</Btn>
+        <Btn variant="outline" onClick={() => window.open('https://chatgpt.com', '_blank', 'noopener')}>Open ChatGPT ↗</Btn>
+      </div>
+      <Textarea rows={5} readOnly value={req.prompt} onFocus={e => e.target.select()} aria-label="Prompt to copy" />
+      <Field label="Paste ChatGPT's reply here" required>
+        <Textarea rows={6} value={pasted} onChange={e => setPasted(e.target.value)} placeholder="Paste the full response…" />
+      </Field>
+      <div className="flex justify-end gap-2">
+        <Btn variant="ghost" onClick={() => close(new Error('Cancelled'))}>Cancel</Btn>
+        <Btn onClick={() => close(null, pasted)} disabled={!pasted.trim()}>Continue</Btn>
+      </div>
+    </Card>
+  </div>;
+}
+
 // ════════════════════════════════════════════════════════════════════
 // APP CONTEXT
 // ════════════════════════════════════════════════════════════════════
@@ -721,7 +803,7 @@ function AppProvider({ children }) {
   const model = MODELS.some(m => m.id === settings.model) ? settings.model : MODELS[0].id;
   const cfg = useMemo(() => ({ model, keys }), [model, keys]);
   const value = { profiles, setProfiles, jobs, setJobs, tailored, setTailored, settings, setSettings, keys, setKeys, cfg, toast, setToast };
-  return <AppCtx.Provider value={value}>{children}{toast && <Toast msg={toast} onClose={() => setToast(null)} />}</AppCtx.Provider>;
+  return <AppCtx.Provider value={value}>{children}<ManualAIModal />{toast && <Toast msg={toast} onClose={() => setToast(null)} />}</AppCtx.Provider>;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -766,6 +848,10 @@ function SettingsView() {
         )}
       </Select>
     </Field>
+    <Card className="p-4 mt-4 border-teal-800/50 bg-teal-950/20">
+      <p className="text-sm text-teal-200 font-semibold mb-1">No API key? Use your ChatGPT subscription</p>
+      <p className="text-xs text-slate-400">Pick <b>ChatGPT (copy &amp; paste)</b> as the model above. When you generate, the app shows you a prompt to paste into chatgpt.com; paste ChatGPT's reply back and the app continues. Nothing to pay per-call — it runs on your existing subscription. (Bulk generation still needs an API model.)</p>
+    </Card>
     <div className="grid sm:grid-cols-1 gap-3 mt-4">
       <ApiKeyField provider="anthropic" />
       <ApiKeyField provider="openai" />
@@ -787,6 +873,7 @@ function ProfilesView({ go }) {
   const fileRef = useRef();
 
   const friendlyError = (msg) => {
+    if (/timed out/i.test(msg)) return msg + ' The provider may be slow or overloaded — try again, or pick a faster model in Settings.';
     if (/no api key/i.test(msg)) return msg + ' Open Settings and paste your key for the selected model\'s provider.';
     if (/failed to fetch|networkerror|load failed/i.test(msg)) return 'Network/CORS error reaching the AI provider (or the PDF parser worker). Check your internet connection and that the API key matches the selected provider. Message: ' + msg;
     if (/401|invalid x-api-key|authentication/i.test(msg)) return 'The API key was rejected (401). Re-check the key in Settings. Message: ' + msg;
@@ -800,15 +887,22 @@ function ProfilesView({ go }) {
     if (!file) return;
     setUploadErr(null);
     const activeProvider = getProvider(cfg.model);
-    if (!cfg.keys?.[activeProvider]) {
-      setUploadErr(`No ${PROVIDER_META[activeProvider].label} API key found for the selected model (${cfg.model}). Add it in Settings, or switch the model to a provider you have a key for.`);
+    if (activeProvider !== 'chatgpt' && !cfg.keys?.[activeProvider]) {
+      setUploadErr(`No ${PROVIDER_META[activeProvider].label} API key found for the selected model (${cfg.model}). Add it in Settings, switch to a provider you have a key for, or pick "ChatGPT (copy & paste)" to use your ChatGPT subscription without a key.`);
       return;
     }
-    setBusy('upload');
+    setBusy('Reading file…');
     try {
       const verrs = await validateUpload(file);
       if (verrs.length) { setUploadErr(verrs[0]); setBusy(null); return; }
-      const rawText = await extractFileText(file);
+      // Extraction runs in-page (pdf.js / mammoth); bound it so a wedged parser
+      // can't leave the button spinning forever.
+      const rawText = await Promise.race([
+        extractFileText(file),
+        new Promise((_, rej) => setTimeout(() => rej(new Error(
+          'Could not read the file within 30s — the PDF parser may be blocked on this network. Try a DOCX or TXT copy of your resume.')), 30000)),
+      ]);
+      setBusy(activeProvider === 'chatgpt' ? 'Waiting for ChatGPT reply…' : 'AI is parsing your resume — usually 15–60s…');
       if (!rawText || rawText.length < 20) throw new Error('Could not extract readable text from this file (it may be a scanned image — try a text-based PDF or DOCX).');
       const { parsed, quality, injection } = await parseResume(cfg, rawText);
       const profile = {
@@ -841,7 +935,7 @@ function ProfilesView({ go }) {
       <div className="flex gap-2">
         <label className="flex items-center gap-1 text-xs text-slate-400"><input type="checkbox" checked={showArchived} onChange={e=>setShowArchived(e.target.checked)} />Show archived</label>
         <input ref={fileRef} type="file" accept=".pdf,.docx,.txt" className="hidden" onChange={onUpload} />
-        <Btn onClick={() => fileRef.current.click()} disabled={busy==='upload'}>{busy==='upload' ? <><Spinner/> Parsing…</> : '＋ Upload resume'}</Btn>
+        <Btn onClick={() => fileRef.current.click()} disabled={!!busy}>{busy ? <><Spinner/> {busy}</> : '＋ Upload resume'}</Btn>
       </div>
     </div>
 
@@ -1416,6 +1510,7 @@ function BulkView({ go }) {
   const run = async () => {
     if (!profile) { setToast('Select a resume profile'); return; }
     if (jobs.length===0) { setToast('No jobs to process'); return; }
+    if (getProvider(cfg.model) === 'chatgpt') { setToast('ChatGPT copy-and-paste mode can\'t run bulk jobs — pick an API model in Settings for bulk.'); return; }
     setRunning(true); cancelRef.current = false;
     audit('bulk.start', { count: jobs.length });
     let queue = rows.map(r => r.status==='completed' ? r : { ...r, status:'queued', error:null });
@@ -1523,8 +1618,8 @@ function BulkView({ go }) {
 // DASHBOARD + DATA CONTROLS
 // ════════════════════════════════════════════════════════════════════
 function Dashboard({ go }) {
-  const { profiles, jobs, tailored, keys } = useApp();
-  const hasKey = Object.values(keys).some(Boolean);
+  const { profiles, jobs, tailored, keys, cfg } = useApp();
+  const hasKey = Object.values(keys).some(Boolean) || getProvider(cfg.model) === 'chatgpt';
   const stats = [
     ['Resume profiles', profiles.filter(p=>p.status!=='archived').length, 'profiles'],
     ['Job targets', jobs.length, 'jobs'],
